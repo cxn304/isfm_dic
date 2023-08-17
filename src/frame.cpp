@@ -1,4 +1,4 @@
-#include "frame.hpp"
+#include "frame.h"
 
 namespace ISfM
 {

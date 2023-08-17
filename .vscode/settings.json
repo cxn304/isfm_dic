@@ -67,6 +67,9 @@
         "charconv": "cpp",
         "unordered_set": "cpp",
         "future": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "geometry": "cpp",
+        "csignal": "cpp",
+        "*.ipp": "cpp"
     }
 }

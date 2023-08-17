@@ -11,11 +11,15 @@
 *.gch
 *.pch
 /build
+/imgs
+/bin
 # Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-
+feature_name.txt
+features.yml
+vocab_larger.yml.gz
 # Fortran module files
 *.mod
 *.smod

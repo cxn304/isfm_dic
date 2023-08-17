@@ -1,4 +1,4 @@
-#include "camera.hpp"
+#include "camera.h"
 
 namespace ISfM
 {
@@ -32,7 +32,7 @@ namespace ISfM
 
     Vec2 Camera::world2pixel(const Vec3 &p_w, const SE3 &T_c_w)
     {
-        return camera2pixel(world2camera(p_w, T_c_w));
+        return camera2pixel(world2camera(p_w, T_c_w),k1_,k2_);
     }
 
     Vec3 Camera::pixel2world(const Vec2 &p_p, const SE3 &T_c_w, double depth)
