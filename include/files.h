@@ -5,41 +5,57 @@
 #include <vector>
 #include <string>
 #include <dirent.h>
+#include "common.h"
 
+using namespace std;
 namespace ISfM
 {
     class ImageLoader
     {
     public:
-        std::vector<std::string> filenames;
+        vector<string> filenames;
+        int num_images_;
+        int width_;
+        int height_;
 
-        ImageLoader(const std::string &path) : path_(path), num_images_(0)
+        ImageLoader(const string &path) : path_(path), num_images_(0)
         {
             // 获取文件名列表
             filenames = get_filenames(path);
 
             // 统计图片数量
-            for (const std::string &filename : filenames)
+            for (const string &filename : filenames)
             {
                 if (is_image_file(filename))
                 {
                     num_images_++;
                 }
             }
+            // 获取图像信息
+            get_images_info(path, filenames, width_, height_);
         }
 
-        int get_num_images() const
+        void get_images_info(const string &path, vector<string> &filenames, int &width, int &height)
         {
-            return num_images_;
+            for (const string &filename : filenames)
+            {
+                if (is_image_file(filename))
+                {
+                    cv::Mat image = cv::imread(filename, cv::IMREAD_UNCHANGED);
+                    // 获取图片的长和宽
+                    width = image.cols;
+                    height = image.rows;
+                    break;
+                }
+            }
         }
 
     private:
-        std::string path_;
-        int num_images_;
+        string path_;
 
-        std::vector<std::string> get_filenames(const std::string &path)
+        vector<string> get_filenames(const string &path)
         {
-            std::vector<std::string> filenames;
+            vector<string> filenames;
             DIR *dirp = opendir(path.c_str());
             struct dirent *dp;
             while ((dp = readdir(dirp)) != nullptr)
@@ -53,10 +69,10 @@ namespace ISfM
             return filenames;
         }
 
-        bool is_image_file(const std::string &filename)
+        bool is_image_file(const string &filename)
         {
             // 检查文件扩展名是否为jpg、png或bmp
-            std::string ext = filename.substr(filename.find_last_of(".") + 1);
+            string ext = filename.substr(filename.find_last_of(".") + 1);
             return (ext == "jpg" || ext == "png" || ext == "bmp");
         }
     };

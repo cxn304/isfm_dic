@@ -1,3 +1,4 @@
+#pragma once
 #ifndef SnavelyReprojection_H
 #define SnavelyReprojection_H
 
@@ -10,8 +11,9 @@ namespace ISfM
     class SnavelyReprojectionError
     {
     public:
-        SnavelyReprojectionError(double observation_x, double observation_y) : observed_x(observation_x),
-                                                                               observed_y(observation_y) {}
+        SnavelyReprojectionError(double observation_x,
+                                 double observation_y) : observed_x(observation_x),
+                                                         observed_y(observation_y) {}
 
         template <typename T>
         // operator()是括号运算符，实现了Ceres计算误差的接口

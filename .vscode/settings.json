@@ -70,6 +70,7 @@
         "valarray": "cpp",
         "geometry": "cpp",
         "csignal": "cpp",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "core": "cpp"
     }
 }

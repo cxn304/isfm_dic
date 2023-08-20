@@ -81,8 +81,8 @@ namespace ISfM
     }
 
     // using DBoW3 to find similar image, for initialization
-    void Dataset::findImageSimilar(const string vocab_file_path,
-                                   const string feature_path, const string filename_path)
+    void Dataset::saveSimilarMatrix(const string vocab_file_path,
+                                    const string feature_path, const string filename_path)
     {
         readImageSave(feature_path, filename_path);
         DBoW3::Vocabulary vocab(vocab_file_path);
@@ -90,8 +90,8 @@ namespace ISfM
         {
             std::cerr << "Vocabulary does not exist." << std::endl;
         }
-
-        Eigen::MatrixXd similarityMatrix(filenames_.size(), filenames_.size());
+        cv::Mat similarityMatrix;
+        similarityMatrix = cv::Mat::zeros(filenames_.size(), filenames_.size(), CV_32FC1);
         cout << "comparing images with images " << endl;
         for (int i = 0; i < filenames_.size(); i++)
         {
@@ -101,13 +101,61 @@ namespace ISfM
             {
                 DBoW3::BowVector v2;
                 vocab.transform(descriptors_[j], v2);
-                double score = vocab.score(v1, v2);
-                similarityMatrix(i,j) = score;
+                float score = vocab.score(v1, v2);
+                if (score > 0.5)
+                    score = 0.0;
+                similarityMatrix.at<float>(i, j) = score;
+            }
+        }
+        // similarityMatrix_ = similarityMatrix; // 所有图片的相似性矩阵
+        cv::FileStorage file("./similarityMatrix.yml", cv::FileStorage::WRITE);
+        file << "matrix" << similarityMatrix << "size" << similarityMatrix.cols;
+        file.release();
+    };
+    ////////////////////////////////////////////////////////////////////////////////////
+    // using orb nums to find similar image, for initialization
+    void Dataset::saveORBSimilar(const string feature_path, const string filename_path)
+    {
+        Eigen::MatrixXd ORBSimilar = Eigen::MatrixXd::Zero(filenames_.size(), filenames_.size());
+        // 创建特征匹配器
+        cv::BFMatcher matcher(cv::NORM_HAMMING);
+        cout << "comparing images with images " << endl;
+        for (int i = 0; i < filenames_.size(); i++)
+        {
+            for (int j = i + 1; j < filenames_.size(); j++)
+            {
+                std::vector<cv::DMatch> matches;
+                // 特征匹配
+                matcher.match(descriptors_[i], descriptors_[j], matches);
+                // 统计匹配点数量
+                int numMatches = matches.size();
+                ORBSimilar(i, j) = numMatches;
             }
         }
         // cout << similarityMatrix.matrix();
-        similarityMatrix_ = similarityMatrix; // 所有图片的相似性矩阵
-    }
+        std::ofstream file("ORBSimilar.txt");
+        if (file.is_open())
+        {
+            // 将矩阵的行和列写入文件
+            file << ORBSimilar.rows() << " " << ORBSimilar.cols() << std::endl;
+            // 逐行写入矩阵元素
+            for (int i = 0; i < ORBSimilar.rows(); ++i)
+            {
+                for (int j = 0; j < ORBSimilar.cols(); ++j)
+                {
+                    file << ORBSimilar(i, j) << " ";
+                }
+                file << std::endl;
+            }
+            file.close();
+            std::cout << "Matrix saved to file." << std::endl;
+        }
+        else
+        {
+            std::cerr << "Failed to open file." << std::endl;
+        }
+    };
+    ////////////////////////////////////////////////////////////////////////////////////
     void Dataset::readImageSave(const string feature_path, const string filename_path)
     {
         std::ifstream file(filename_path); // 打开一个输入文件流
@@ -151,5 +199,18 @@ namespace ISfM
             descriptors_.push_back(descriptor);
         }
         fs.release();
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    cv::Mat Dataset::readSimilarMatrix(const string matrixPath,const string feature_path, const string filename_path)
+    {
+        cv::FileStorage fs(matrixPath, cv::FileStorage::READ);
+        if (!fs.isOpened())
+        {
+            std::cout << "无法打开文件：" << matrixPath << std::endl;
+        }
+        cv::Mat sMatrix;
+        fs["matrix"] >> sMatrix;
+        fs.release();
+        return sMatrix;
     }
 }

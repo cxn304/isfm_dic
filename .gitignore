@@ -34,3 +34,6 @@ vocab_larger.yml.gz
 *.exe
 *.out
 *.app
+ORBSimilar.txt
+similarityMatrix.txt
+similarityMatrix.yml

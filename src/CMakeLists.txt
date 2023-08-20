@@ -2,6 +2,9 @@
 file(GLOB SRC_FILES "*.cpp")
 add_library(ISfM SHARED
         dataset.cpp
+        inits.cpp
+        projection.cpp
+        #map_builder.cpp
         )
 # 创建库
 # add_library(ISfM SHARED ${SRC_FILES})

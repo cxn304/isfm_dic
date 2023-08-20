@@ -3,6 +3,7 @@
 #define FRAME_H
 #include "common.h"
 
+using namespace std;
 namespace ISfM
 {
 
@@ -20,14 +21,15 @@ namespace ISfM
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
         typedef std::shared_ptr<Frame> Ptr;
 
-        unsigned long id_ = 0;          // id of this frame
-        unsigned long keyframe_id_ = 0; // id of key frame
+        unsigned id_ = 0;          // id of this frame
+        unsigned keyframe_id_ = 0; // id of key frame
         bool is_keyframe_ = false;      // 是否为关键帧
         SE3 pose_;                      // Tcw 形式Pose
         std::mutex pose_mutex_;         // Pose数据锁
         cv::Mat img_d;                  // images
+        string img_name;
 
-        // extracted features in left image
+        // features in this image
         std::vector<std::shared_ptr<Feature>> features_img_;
 
     public: // data members
@@ -48,7 +50,7 @@ namespace ISfM
             pose_ = pose;
         }
 
-        /// 设置关键帧并分配并键帧id
+        /// 设置关键帧并分配键帧id
         void SetKeyFrame();
 
         /// 工厂构建模式，分配id
