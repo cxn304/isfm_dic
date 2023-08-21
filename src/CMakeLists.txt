@@ -4,6 +4,8 @@ add_library(ISfM SHARED
         dataset.cpp
         inits.cpp
         projection.cpp
+        triangulate.cpp
+        #feature_utils.cpp
         #map_builder.cpp
         )
 # 创建库

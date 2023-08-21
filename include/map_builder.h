@@ -4,6 +4,7 @@
 #include "common.h"
 #include "inits.h"
 
+using namespace std;
 namespace ISfM
 {
     class MapBuilder
@@ -43,67 +44,63 @@ namespace ISfM
         };
 
     public:
-        MapBuilder(const std::string &database_path, const MapBuilder::Parameters &params);
+        MapBuilder(const string &database_path, const MapBuilder::Parameters &params);
 
-        ////////////////////////////////////////////////////////////////////////////////
+        
         // 重建时，需要调用的函数
         // 调用SetUp() 设置重建时需要加载的数据
         // 调用DoBuild() 来进行重建
         // 调用Summary() 输出重建结果的统计信息
-        ////////////////////////////////////////////////////////////////////////////////
+        
         void SetUp();
-        void DoBuild();
-        void Summary();
+        void doBuild();
 
         //
-        ////////////////////////////////////////////////////////////////////////////////
+        
         // 将重建结果（相机参数、图片参数、3D点）写到文件中
-        ////////////////////////////////////////////////////////////////////////////////
-        void WriteCOLMAP(const std::string &directory);
-        void WriteOpenMVS(const std::string &directory);
-        void WritePLY(const std::string &path);
-        void WritePLYBinary(const std::string &path);
-        void Write(const std::string &path);
-        void WriteCamera(const std::string &path);
-        void WriteImages(const std::string &path);
-        void WritePoints3D(const std::string &path);
+        
+        void WriteCOLMAP(const string &directory);
+        void WriteOpenMVS(const string &directory);
+        void WritePLY(const string &path);
+        void WritePLYBinary(const string &path);
+        void Write(const string &path);
+        void WriteCamera(const string &path);
+        void WriteImages(const string &path);
+        void WritePoints3D(const string &path);
 
     private:
-        ////////////////////////////////////////////////////////////////////////////////
+        
         // 寻找用于初始化的图像对
-        ////////////////////////////////////////////////////////////////////////////////
-        std::vector<image_t> FindFirstInitialImage() const;
-        std::vector<image_t> FindSecondInitialImage(image_t image_id) const;
+        
+        vector<int> FindFirstInitialImage() const;
+        vector<int> FindSecondInitialImage(int image_id) const;
 
-        ////////////////////////////////////////////////////////////////////////////////
+        
         // 尝试进行初始化，直至成功，或者得到限定的初始化次数
-        ////////////////////////////////////////////////////////////////////////////////
         bool TryInitialize();
 
-        ////////////////////////////////////////////////////////////////////////////////
         // 尝试注册下一张图片
-        ////////////////////////////////////////////////////////////////////////////////
-        bool TryRegisterNextImage(const image_t &image_id);
-        size_t Triangulate(const std::vector<std::vector<Map::CorrData>> &points2D_corr_datas,
+        bool TryRegisterNextImage(const int &image_id);
+        size_t Triangulate(const vector<vector<Map::CorrData>> &points2D_corr_datas,
                            double &ave_residual);
 
-        ////////////////////////////////////////////////////////////////////////////////
+        
         // 如果进行Local BA， 所需要进行的操作
-        ////////////////////////////////////////////////////////////////////////////////
+        
         void LocalBA();
         void MergeTracks();
         void CompleteTracks();
         void FilterTracks();
 
-        ////////////////////////////////////////////////////////////////////////////////
+        
         // 如果进行Global BA， 所需要进行的操作
-        ////////////////////////////////////////////////////////////////////////////////
+        
         void GlobalBA();
         void FilterAllTracks();
         // TODO : 对图像（或图像对）中没有3D点的2D点进行重建三角测量
-        void Retriangulate();
+        void retriangulate();
 
-        std::string database_path_;
+        string database_path_;
         Parameters params_;
 
         cv::Ptr<Initializer> initailizer_;

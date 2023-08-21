@@ -152,22 +152,22 @@ namespace ISfM
         cv::Mat O2 = -Rwto2.t() * t2; // -t2表示
 
         cv::Vec3d proj_center1(O1.at<double>(0, 0), O1.at<double>(1, 0), O1.at<double>(2, 0));
-        cv::Vec3d proj_centeRwto2(O2.at<double>(0, 0), O2.at<double>(1, 0), O2.at<double>(2, 0));
+        cv::Vec3d proj_center2(O2.at<double>(0, 0), O2.at<double>(1, 0), O2.at<double>(2, 0));
 
-        double tri_angle = CalculateParallaxAngle(point3D, proj_center1, proj_centeRwto2);
+        double tri_angle = CalculateParallaxAngle(point3D, proj_center1, proj_center2);
         return tri_angle;
     }
 
     double Projection::CalculateParallaxAngle(const cv::Vec3d &point3d,
                                               const cv::Vec3d &proj_center1,
-                                              const cv::Vec3d &proj_centeRwto2)
+                                              const cv::Vec3d &proj_center2)
     {
         // (1)余弦定理
         // cosA = (b^2 + c^2 - a^2) / 2bc
         // (2)也可以使用a * b = |a| * |b| * cos来计算
-        const double baseline = norm(proj_center1 - proj_centeRwto2);
-        const double ray1 = norm(point3d - proj_center1);
-        const double ray2 = norm(point3d - proj_centeRwto2);
+        const double baseline = cv::norm(proj_center1 - proj_center2);
+        const double ray1 = cv::norm(point3d - proj_center1);
+        const double ray2 = cv::norm(point3d - proj_center2);
 
         const double angle = std::abs(
             std::acos((ray1 * ray1 + ray2 * ray2 - baseline * baseline) / (2 * ray1 * ray2)));

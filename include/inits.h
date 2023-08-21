@@ -3,6 +3,7 @@
 #define INITIALIZER_H
 #include "common.h"
 #include "projection.h"
+#include "files.h"
 
 using namespace std;
 namespace ISfM
@@ -46,6 +47,7 @@ namespace ISfM
     public:
         Initializer() {}
         Initializer(const Parameters &params, const cv::Mat &K);
+        Initializer(const ImageLoader &image_loader);
         // 读取相似矩阵
         
         // 找到图像间的相似特征, 最大相关度的两张图片的id, 返回pts1和pts2,要以&取值的方式将pts1传入
@@ -93,6 +95,7 @@ namespace ISfM
         Parameters params_;
         Statistics statistics_;
         cv::Mat K_;
+        ImageLoader image_loader_;
     };
 }
 #endif

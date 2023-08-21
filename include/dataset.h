@@ -29,11 +29,11 @@ namespace ISfM
         getFeatures() const { return features_; } // image name and their kpts, des
         cv::Mat getDboScore() const { return dbo_score_; }
         void setDboScore(const cv::Mat &score) { dbo_score_ = score; }
-        void saveSimilarMatrix(const string vocab_file_path,
-         const string feature_path, const string filename_path);
+        void saveSimilarMatrix(DBoW3::Vocabulary &vocab,
+         const string &feature_path, const string &filename_path);
         void saveORBSimilar(const string feature_path, const string filename_path);
         void readImageSave(const string feature_path, const string filename_path);
-        cv::Mat readSimilarMatrix(const string matrixPath,const string feature_path, const string filename_path);
+        cv::Mat readDateSet(const string matrixPath,const string feature_path, const string filename_path);
         
         string vocab_file_path;
         vector<vector<cv::KeyPoint>> kpoints_;

@@ -17,7 +17,7 @@ namespace ISfM
         int num_images_;
         int width_;
         int height_;
-
+        ImageLoader(){};
         ImageLoader(const string &path) : path_(path), num_images_(0)
         {
             // 获取文件名列表

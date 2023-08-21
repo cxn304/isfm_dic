@@ -15,8 +15,9 @@ set(CMAKE_MODULE_PATH"/usr/local/lib/cmake/Ceres")
 # Eigen
 include_directories("/usr/include/eigen3")
 
-# OpenCV
-find_package(OpenCV REQUIRED)
+# 设置 OpenCV 的路径
+set(OpenCV_DIR "/etc/opencv4.6")
+find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR})
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 # pangolin

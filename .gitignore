@@ -17,6 +17,7 @@
 *.so
 *.dylib
 *.dll
+*.jpg
 feature_name.txt
 features.yml
 vocab_larger.yml.gz

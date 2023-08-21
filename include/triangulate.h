@@ -1,7 +1,7 @@
 #ifndef TRIANGULATE_H
 #define TRIANGULATE_H
 
-// algorithms used in myslam
+// triangulation used in
 #include "common.h"
 namespace ISfM
 {

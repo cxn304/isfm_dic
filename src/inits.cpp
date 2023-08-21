@@ -9,6 +9,14 @@ namespace ISfM
     {
         assert(K_.type() == CV_64F);
     };
+    Initializer::Initializer(const ImageLoader &image_loader)
+        : image_loader_(image_loader)
+    {
+        K_ = (cv::Mat_<double>(3, 3) << image_loader.width_, 0, image_loader.width_,
+                                    0, image_loader.width_, image_loader.height_,
+                                    0, 0, 1);
+    };
+
 
     //////////////////////////////////////////////////////////////////////////////////////
     void Initializer::featureMatching(cv::Mat &similarityMatrix_,
@@ -62,7 +70,7 @@ namespace ISfM
 
         double H_F_ratio = static_cast<double>(num_inliers_H) / static_cast<double>(num_inliers_F);
 
-        statistics_.is_succeed = false;
+        statistics_.is_succeed = false; // 在这些地方进行了赋值和初始化?
         statistics_.num_inliers_F = num_inliers_F;
         statistics_.num_inliers_H = num_inliers_H;
         statistics_.H_F_ratio = H_F_ratio;
@@ -153,12 +161,6 @@ namespace ISfM
         vector<cv::Mat> Rs; // 用于输出
         vector<cv::Mat> ts;
         // 将单应性矩阵分解为旋转矩阵和平移向量
-        ////////////////////////////////////////////////////////////////////////////
-        ISfM::ImageLoader Cimage_loader("./imgs/Viking/");
-        K_ = (cv::Mat_<double>(3, 3) << Cimage_loader.width_/2, 0, Cimage_loader.width_,
-                                    0, Cimage_loader.width_/2, Cimage_loader.height_,
-                                    0, 0, 1);
-        ////////////////////////////////////////////////////////////////////////////
         cv::decomposeHomographyMat(H, K_, Rs, ts, cv::noArray());// Rs和ts有多个解
         size_t best_num_inlier = 0;
         // 在这些解中找到最合适的解
