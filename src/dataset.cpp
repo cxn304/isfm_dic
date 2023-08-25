@@ -1,6 +1,5 @@
 #include "dataset.h"
-#include "frame.h"
-#include "feature_utils.h"
+#include <boost/format.hpp>
 
 using namespace std;
 namespace ISfM
@@ -15,8 +14,8 @@ namespace ISfM
         // 创建ORB特征提取器对象
         cv::Ptr<cv::Feature2D> orb = cv::ORB::create();
         // 创建文件存储对象,包括features和descriptor,文件名
-        cv::FileStorage fs(current_dir + "/features.yml", cv::FileStorage::WRITE);
-        std::ofstream file("./feature_name.txt"); // 打开一个输出文件流
+        cv::FileStorage fs(current_dir + "/data/features.yml", cv::FileStorage::WRITE);
+        std::ofstream file("./data/feature_name.txt"); // 打开一个输出文件流
         // 创建词袋模型存储mat
         vector<cv::Mat> descriptors;
         // 加载第一张图像
@@ -29,6 +28,7 @@ namespace ISfM
         {
             // 加载图像
             cv::Mat image = cv::imread(file_path, cv::IMREAD_GRAYSCALE);
+            cv::Mat mask(image.size(), CV_8UC1, 255);
             if (image.empty())
             {
                 cerr << "Failed to read image: " << file_path << endl;
@@ -38,17 +38,17 @@ namespace ISfM
             vector<cv::KeyPoint> kpts;
             // 计算关键点的描述符
             cv::Mat descriptor;
-            orb->detectAndCompute(image, cv::noArray(), kpts, descriptor);
-            cv::drawKeypoints(image, kpts, image, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-            cv::imwrite("keypoints_with_descriptors.jpg", image);
+            int cnt = DetectFeatures(image, kpts, descriptor);
+            // cv::drawKeypoints(image, kpts, image, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+            // cv::imwrite("keypoints_with_descriptors.jpg", image);
             // 将关键点和描述符保存到文件
             // 提取文件名
-            size_t lastSlash = file_path.find_last_of("/\\");  // 查找路径中最后一个斜杠或反斜杠的位置
+            size_t lastSlash = file_path.find_last_of("/\\");           // 查找路径中最后一个斜杠或反斜杠的位置
             string filename = "img_" + file_path.substr(lastSlash + 1); // 提取最后一个斜杠之后的部分
             replace(filename.begin(), filename.end(), '.', 'd');
             fs << filename << "{"
                << "imd_id" << img_id
-               << "file_path"<< file_path
+               << "file_path" << file_path
                << "kpts" << kpts
                << "descriptor" << descriptor
                << "}";
@@ -58,6 +58,7 @@ namespace ISfM
             }
             descriptors.push_back(descriptor);
             features_[filename] = make_pair(kpts, descriptor);
+            file_paths_[img_id] = file_path;
             img_id++;
         }
         // 关闭文件存储
@@ -67,10 +68,61 @@ namespace ISfM
         DBoW3::Vocabulary vocab;
         vocab.create(descriptors);
         // cout << "vocabulary info: " << vocab << endl;
-        string file_path = current_dir + "/vocab_larger.yml.gz";
+        string file_path = current_dir + "/data/vocab_larger.yml.gz";
         vocab.save(file_path);
-        saveSimilarMatrix(vocab, "./features.yml", "./feature_name.txt");
-        cout << "done" << endl;
+        saveSimilarMatrix(vocab, "./data/features.yml", "./data/feature_name.txt");
+        cout << "features detect done" << endl;
+    }
+
+    int Dataset::DetectFeatures(const cv::Mat &image, vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
+    {
+        cv::Mat mask(image.size(), CV_8UC1, 255);
+        // 创建 ORB 对象
+        cv::Ptr<cv::ORB> orb = cv::ORB::create(2000);
+        // 检测特征点
+        orb->detect(image, keypoints);
+        // 计算特征描述符
+        orb->compute(image, keypoints, descriptors);
+        // 设置特征点之间的最小距离阈值
+        float minDistancePixels = 1.0f;
+        // 迭代遍历特征点，根据距离阈值筛选特征点
+        std::vector<cv::KeyPoint> filteredKeypoints;
+        vector<int> extracted_id;
+        for (int i = 0; i < keypoints.size(); ++i)
+        {
+            const auto &keypoint = keypoints[i];
+            bool keepKeypoint = true;
+            for (int j = 0; j < keypoints.size(); ++j)
+            {
+                if (i == j)
+                    continue;
+                const auto &otherKeypoint = keypoints[j];
+                float distance = cv::norm(keypoint.pt - otherKeypoint.pt);
+
+                if (distance < minDistancePixels)
+                {
+                    keepKeypoint = false;
+                    break;
+                }
+            }
+            if (keepKeypoint)
+            {
+                filteredKeypoints.push_back(keypoint);
+                extracted_id.push_back(i);
+            }
+        }
+        cv::Mat filteredDescriptors(extracted_id.size(), descriptors.cols, CV_32F);
+        for (int i = 0; i < extracted_id.size(); ++i)
+        {
+            // 将每个描述符复制到矩阵中的相应位置
+            cv::Mat descript = descriptors.row(extracted_id[i]); // 获取描述符
+            descript.copyTo(filteredDescriptors.row(i));
+        }
+
+        // 将筛选后的特征点和描述符赋值给原始变量
+        keypoints = filteredKeypoints;
+        descriptors = filteredDescriptors;
+        return keypoints.size();
     }
 
     // using DBoW3 to find similar image, for initialization
@@ -100,7 +152,7 @@ namespace ISfM
             }
         }
         // similarityMatrix_ = similarityMatrix; // 所有图片的相似性矩阵
-        cv::FileStorage file("./similarityMatrix.yml", cv::FileStorage::WRITE);
+        cv::FileStorage file("./data/similarityMatrix.yml", cv::FileStorage::WRITE);
         file << "matrix" << similarityMatrix << "size" << similarityMatrix.cols;
         file.release();
     };
@@ -151,29 +203,31 @@ namespace ISfM
     void Dataset::readImageSave(const string feature_path, const string filename_path)
     {
         ifstream file(filename_path); // 打开一个输入文件流
-        if (file.is_open())
+        if (filenames_.empty())
         {
-            string line;
-            while (getline(file, line))
+            if (file.is_open())
             {
-                if (line.substr(line.length() - 3) == "jpg" || line.substr(line.length() - 3) == "png")
+                string line;
+                while (getline(file, line))
                 {
-                    filenames_.push_back(line); // 存储以 ".jpg" 或 ".png" 结尾的行
+                    if (line.substr(line.length() - 3) == "jpg" || line.substr(line.length() - 3) == "png")
+                    {
+                        filenames_.push_back(line); // 存储以 ".jpg" 或 ".png" 结尾的行
+                    }
                 }
+                file.close(); // 关闭文件流
             }
-            file.close(); // 关闭文件流
-        }
-        else
-        {
-            cout << "can't open file" << endl;
-        }
-        cout << "reading database" << endl;
-        cv::FileStorage fs(feature_path, cv::FileStorage::READ);
-        if (!fs.isOpened())
-        {
-            cout << "can't open file" << feature_path << endl;
-        }
-        for (auto &fms : filenames_)
+            else
+            {
+                cout << "can't open file" << endl;
+            }
+            cout << "reading database" << endl;
+            cv::FileStorage fs(feature_path, cv::FileStorage::READ);
+            if (!fs.isOpened())
+            {
+                cout << "can't open file" << feature_path << endl;
+            }
+            for (auto &fms : filenames_)
         {
             cv::FileNode kptsNode = fs[fms]["kpts"];
             vector<cv::KeyPoint> kpts;
@@ -183,18 +237,25 @@ namespace ISfM
                 kptNode >> kpt;
                 kpts.push_back(kpt);
             }
-            kpoints_.push_back(kpts);
+            kpoints_.push_back(kpts); // 这里要修改,kpts是一个point2d类才行
             cv::FileNode descriptorNode = fs[fms]["descriptor"];
             cv::Mat descriptor;
             descriptorNode >> descriptor;
             descriptors_.push_back(descriptor);
         }
         fs.release();
+        }
     }
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    cv::Mat Dataset::readDateSet(const string matrixPath, const string feature_path, const string filename_path)
+    ///////////////////////////////建立好数据库后,再read//////////////////////////////////////////
+    cv::Mat Dataset::readDateSet(const string &matrixPath, const string &feature_path, const string &filename_path,
+                                 const vector<string> &filenames)
     {
         readImageSave(feature_path, filename_path);
+        for (int i = 0; i < filenames.size(); i++)
+        {
+            file_paths_.insert(std::make_pair(i, filenames[i]));
+        }
+
         cv::FileStorage fs(matrixPath, cv::FileStorage::READ);
         if (!fs.isOpened())
         {
@@ -204,5 +265,102 @@ namespace ISfM
         fs["matrix"] >> sMatrix;
         fs.release();
         return sMatrix;
+    };
+    ////////////////////////////计算并储存matches,需要先readDateSet///////////////////////////////////////
+    void Dataset::computeAndSaveMatches()
+    {
+        // 对每对相邻图像进行特征点匹配
+        for (int i = 0; i < file_paths_.size() - 1; ++i)
+        {
+            std::vector<cv::DMatch> matches;
+            ComputeMatches(descriptors_[i], descriptors_[i + 1], matches, 0.8);
+            // 构建图像对
+            std::pair<int, int> imagePair(i, i + 1);
+            matchesMap_[imagePair] = matches;
+        }
+        string filename = "./data/match_info.yml";
+        cv::FileStorage fs(filename, cv::FileStorage::WRITE);
+
+        if (!fs.isOpened())
+        {
+            std::cerr << "Failed to open file: " << filename << std::endl;
+            return;
+        }
+        fs << "matches"
+           << "[";
+        for (const auto &pair : matchesMap_)
+        {
+            fs << "{";
+            fs << "imagePair"
+               << "[" << pair.first.first << pair.first.second << "]";
+            fs << "matches"
+               << "[";
+            for (const cv::DMatch &match : pair.second)
+            {
+                fs << "{";
+                fs << "queryIdx" << match.queryIdx;
+                fs << "trainIdx" << match.trainIdx;
+                fs << "}";
+            }
+            fs << "]";
+            fs << "}";
+        }
+        fs << "]";
+        fs.release();
+    };
+
+    void Dataset::ComputeMatches(const cv::Mat &desc1,
+                                 const cv::Mat &desc2,
+                                 std::vector<cv::DMatch> &matches,
+                                 const float distance_ratio)
+    {
+        cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create("BruteForce");
+        std::vector<std::vector<cv::DMatch>> initial_matches;
+
+        matcher->knnMatch(desc1, desc2, initial_matches, 2);
+        for (auto &m : initial_matches)
+        {
+            if (m[0].distance < distance_ratio * m[1].distance)
+            {
+                matches.push_back(m[0]);
+            }
+        }
+    }
+
+    ///////////////////////////将match读取储存到Dataset的matchesMap_当中///////////////////////////////////
+    void Dataset::loadMatchesFromFile(const std::string &filename)
+    {
+        cv::FileStorage fs(filename, cv::FileStorage::READ);
+
+        if (!fs.isOpened())
+        {
+            std::cerr << "Failed to open file: " << filename << std::endl;
+            return;
+        }
+
+        cv::FileNode matchesNode = fs["matches"];
+        for (cv::FileNodeIterator it = matchesNode.begin(); it != matchesNode.end(); ++it)
+        {
+            cv::FileNode matchNode = *it;
+            std::pair<int, int> imagePair;
+            std::vector<cv::DMatch> matches;
+
+            imagePair.first = (int)matchNode["imagePair"][0];
+            imagePair.second = (int)matchNode["imagePair"][1];
+
+            cv::FileNode matchesListNode = matchNode["matches"];
+            for (cv::FileNodeIterator it2 = matchesListNode.begin(); it2 != matchesListNode.end(); ++it2)
+            {
+                cv::FileNode matchObjNode = *it2;
+                cv::DMatch match;
+                matchObjNode["queryIdx"] >> match.queryIdx;
+                matchObjNode["trainIdx"] >> match.trainIdx;
+                matches.push_back(match);
+            }
+
+            matchesMap_[imagePair] = matches;
+        }
+
+        fs.release();
     }
 }

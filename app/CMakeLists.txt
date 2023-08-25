@@ -1,3 +1,5 @@
-add_executable(feature_extract feature_extract.cpp)
+# add_executable(feature_extract_match feature_extract_match.cpp)
+add_executable(construct construct.cpp)
 set(CMAKE_BUILD_TYPE "Debug")
-target_link_libraries(feature_extract ISfM ${THIRD_PARTY_LIBS})
+# target_link_libraries(feature_extract_match ISfM ${THIRD_PARTY_LIBS})
+target_link_libraries(construct ISfM ${THIRD_PARTY_LIBS})

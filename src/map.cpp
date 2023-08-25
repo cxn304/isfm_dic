@@ -1,5 +1,5 @@
 #include "map.h"
-#include "feature.h"
+
 
 namespace ISfM
 {
@@ -23,7 +23,7 @@ namespace ISfM
         }
     }
 
-    void Map::InsertMapPoint(Poind3d::Ptr map_point)
+    void Map::InsertMapPoint(MapPoint::Ptr map_point)
     {
         if (landmarks_.find(map_point->id_) == landmarks_.end())
         {

@@ -4,6 +4,10 @@
 #include "common.h"
 #include "projection.h"
 #include "files.h"
+#include "point3d.h"
+#include "dataset.h"
+#include "map.h"
+#include "feature.h"
 
 using namespace std;
 namespace ISfM
@@ -47,44 +51,43 @@ namespace ISfM
     public:
         Initializer() {}
         Initializer(const Parameters &params, const cv::Mat &K);
-        Initializer(const ImageLoader &image_loader);
+        Initializer(const ImageLoader &image_loader,const Dataset &Cdate);
         // 读取相似矩阵
         
         // 找到图像间的相似特征, 最大相关度的两张图片的id, 返回pts1和pts2,要以&取值的方式将pts1传入
-        void featureMatching(cv::Mat &similarityMatrix_,
+        void featureMatching(double img_index1,double img_index2,
                              vector<vector<cv::KeyPoint>> &kpoints_,
                              vector<cv::Mat> &descriptors_,
-                             vector<cv::Point2f> &pts1,
-                             vector<cv::Point2f> &pts2);
+                             vector<Feature::Ptr> &pts1,
+                             vector<Feature::Ptr> &pts2);
         // 初始化主函数
-        Statistics Initialize(const vector<cv::Point2f> &points2D1,
-                              const vector<cv::Point2f> &points2D2);
+        Statistics Initialize();
         void PrintStatistics(const Statistics &statistics);// 打印初始化参数
         string GetFailReason();
 
     private:
         // 使用自带参数寻找Homo矩阵,inlier_mask用于标记哪些点对被认为是内点
-        void FindHomography(const vector<cv::Point2f> &points2D1,
-                            const vector<cv::Point2f> &points2D2,
+        void FindHomography(const vector<Feature::Ptr> &points2D1,
+                            const vector<Feature::Ptr> &points2D2,
                             cv::Mat &H,
                             vector<bool> &inlier_mask,
                             size_t &num_inliers);
         // 使用自带参数寻找Fundemental矩阵
-        void FindFundanmental(const vector<cv::Point2f> &points2D1,
-                              const vector<cv::Point2f> &points2D2,
+        void FindFundanmental(const vector<Feature::Ptr> &points2D1,
+                              const vector<Feature::Ptr> &points2D2,
                               cv::Mat &F,
                               vector<bool> &inlier_mask,
                               size_t &num_inliers);
         // 恢复相机外参从Homography矩阵
         bool RecoverPoseFromHomography(const cv::Mat &H,
-                                       const vector<cv::Point2f> &points2D1,
-                                       const vector<cv::Point2f> &points2D2,
+                                       const vector<Feature::Ptr> &points2D1,
+                                       const vector<Feature::Ptr> &points2D2,
                                        const vector<bool> &inlier_mask_H);
         //
         bool RecoverPoseFromFundanmental(const cv::Mat &F,
-                                         const std::vector<cv::Point2f> &points2D1,
-                                         const std::vector<cv::Point2f> &points2D2,
-                                         const std::vector<bool> &inlier_mask_F);
+                                         const vector<Feature::Ptr> &points2D1,
+                                         const vector<Feature::Ptr> &points2D2,
+                                         const vector<bool> &inlier_mask_F);
         // 初始化中的三角化,P1,P2: K*[R,t] (3x3*3x4), return: 3d point
         cv::Vec3d Triangulate(const cv::Mat &P1,
                               const cv::Mat &P2,
@@ -96,6 +99,11 @@ namespace ISfM
         Statistics statistics_;
         cv::Mat K_;
         ImageLoader image_loader_;
+        Dataset Cdate_;
+        Map::Ptr map_ = nullptr;
+        Frame::Ptr frameone_ = nullptr;  // 选定的一帧
+        Frame::Ptr frametwo_ = nullptr;  // 选定的另一帧
+        vector<vector<Feature::Ptr>> features_;  // 转换后的 Feature 对象,2维点
     };
 }
 #endif

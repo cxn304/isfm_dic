@@ -2,17 +2,17 @@
 
 namespace ISfM
 {
-    Poind3d::Poind3d(long id, Vec3 position) : id_(id), pos_(position) {}
+    MapPoint::MapPoint(long id, cv::Vec3d position) : id_(id), pos_(position) {}
 
-    Poind3d::Ptr Poind3d::CreateNewMappoint()
+    MapPoint::Ptr MapPoint::CreateNewMappoint()
     {
         static long factory_id = 0;
-        Poind3d::Ptr new_mappoint(new Poind3d);
+        MapPoint::Ptr new_mappoint(new MapPoint);
         new_mappoint->id_ = factory_id++;
         return new_mappoint;
     }
 
-    void Poind3d::RemoveObservation(std::shared_ptr<Feature> feat)
+    void MapPoint::RemoveObservation(std::shared_ptr<Feature> feat)
     {
         std::unique_lock<std::mutex> lck(data_mutex_);
         for (auto iter = observations_.begin(); iter != observations_.end();

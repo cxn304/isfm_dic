@@ -1,5 +1,5 @@
 #include "inits.h"
-#include "files.h"
+
 
 using namespace std;
 namespace ISfM
@@ -9,51 +9,36 @@ namespace ISfM
     {
         assert(K_.type() == CV_64F);
     };
-    Initializer::Initializer(const ImageLoader &image_loader)
-        : image_loader_(image_loader)
+    Initializer::Initializer(const ImageLoader &image_loader, const Dataset &Cdate)
+        : image_loader_(image_loader), Cdate_(Cdate)
     {
         K_ = (cv::Mat_<double>(3, 3) << image_loader.width_, 0, image_loader.width_,
-                                    0, image_loader.width_, image_loader.height_,
-                                    0, 0, 1);
-    };
-
-
-    //////////////////////////////////////////////////////////////////////////////////////
-    void Initializer::featureMatching(cv::Mat &similarityMatrix_,
-                                      vector<vector<cv::KeyPoint>> &kpoints_,
-                                      vector<cv::Mat> &descriptors_, vector<cv::Point2f> &pts1,
-                                      vector<cv::Point2f> &pts2)
-    {
-        double minValue, maxValue;
-        cv::Point minLoc, maxLoc;
-        cv::minMaxLoc(similarityMatrix_, &minValue, &maxValue, &minLoc, &maxLoc);
-        // cout << "Similarity Matrix:\n" << similarityMatrix_ << endl;
-        int img_index1 = maxLoc.y;
-        int img_index2 = maxLoc.x; // 最大相关度的两张图片的id
-        // 创建特征点匹配器
-        cv::BFMatcher matcher(cv::NORM_HAMMING);
-        // 特征点匹配
-        vector<cv::DMatch> matches;
-        matcher.match(descriptors_[img_index1], descriptors_[img_index2], matches);
-        vector<int> pts1_idx;
-        vector<int> pts2_idx;
-        for (const cv::DMatch &match : matches)
+              0, image_loader.width_, image_loader.height_,
+              0, 0, 1);
+        // 遍历 kpoints_, 将二维特征点转换为Feature对象
+        for (int i = 0; i < Cdate.kpoints_.size(); i++)
         {
-            size_t queryIdx = match.queryIdx; // 查询图像中的特征点索引
-            size_t trainIdx = match.trainIdx; // 训练图像中的特征点索引
-            cv::Point2f queryPt = kpoints_[img_index1][queryIdx].pt;
-            cv::Point2f trainPt = kpoints_[img_index2][trainIdx].pt;
-            cout << "Query Point: " << queryPt << ", Train Point: " << trainPt << endl;
-            pts1.push_back(queryPt);
-            pts2.push_back(trainPt);
-            pts1_idx.push_back(queryIdx);
-            pts2_idx.push_back(trainIdx);
+            std::vector<Feature::Ptr> featureRow;
+
+            for (int j = 0; j < Cdate.kpoints_[i].size(); j++)
+            {
+                const cv::KeyPoint &kp = Cdate.kpoints_[i][j];
+                Feature::Ptr feature = std::make_shared<Feature>(i, kp);
+                featureRow.push_back(feature);
+            }
+            features_.push_back(featureRow);
         }
+        auto new_frame = Frame::CreateFrame();//返回Frame::Ptr类型的东西
+        new_frame->img_name = image_loader.filenames_[0];
+        new_frame->id_ = 0;
+        frameone_ = new_frame;
+        auto new_frame1 = Frame::CreateFrame();//返回Frame::Ptr类型的东西
+        new_frame1->img_name = image_loader.filenames_[1];
+        new_frame1->id_ = 1;
+        frametwo_ = new_frame1;
     };
     //////////////////////////////////////////////////////////////////////////////////////
-    Initializer::Statistics Initializer::Initialize(
-        const vector<cv::Point2f> &pts1,
-        const vector<cv::Point2f> &pts2)
+    Initializer::Statistics Initializer::Initialize()
     {
         cv::Mat H;
         cv::Mat F;
@@ -61,6 +46,8 @@ namespace ISfM
         vector<bool> inlier_mask_F;
         size_t num_inliers_H;
         size_t num_inliers_F;
+        vector<Feature::Ptr> pts1 = features_[0];
+        vector<Feature::Ptr> pts2 = features_[1];
 
         FindHomography(pts1, pts2, H, inlier_mask_H, num_inliers_H);
         FindFundanmental(pts1, pts2, F, inlier_mask_F, num_inliers_F);
@@ -96,15 +83,17 @@ namespace ISfM
         return statistics_;
     };
 
-    //////////////////////////////////////////////////////////////////////////////////////
-    void Initializer::FindHomography(const vector<cv::Point2f> &points2D1,
-                                     const vector<cv::Point2f> &points2D2,
+    /////////////////////////////要注意的是feature2D1和feature2D2得是对应点////////////////////////////////
+    void Initializer::FindHomography(const vector<Feature::Ptr> &feature2D1,
+                                     const vector<Feature::Ptr> &feature2D2,
                                      cv::Mat &H,
                                      vector<bool> &inlier_mask,
                                      size_t &num_inliers)
     {
         // 使用引用作为函数参数的好处是可以避免在函数调用时进行对象的复制,从而提高性能
         cv::Mat cv_inlier_mask; // 输出的内点掩码,用于标记哪些点对被认为是内点
+        vector<cv::Point2f> points2D1 = Feature::convertFeaturesToPoints(feature2D1);
+        vector<cv::Point2f> points2D2 = Feature::convertFeaturesToPoints(feature2D2);
         H = cv::findHomography(points2D1,
                                points2D2,
                                cv::RANSAC, params_.rel_pose_homography_error,
@@ -125,14 +114,15 @@ namespace ISfM
         }
     };
     //////////////////////////////////////////////////////////////////////////////////////
-    void Initializer::FindFundanmental(const vector<cv::Point2f> &points2D1,
-                                       const vector<cv::Point2f> &points2D2,
+    void Initializer::FindFundanmental(const vector<Feature::Ptr> &feature2D1,
+                                       const vector<Feature::Ptr> &feature2D2,
                                        cv::Mat &F,
                                        vector<bool> &inlier_mask,
                                        size_t &num_inliers)
     {
         cv::Mat cv_inlier_mask;
-
+        vector<cv::Point2f> points2D1 = Feature::convertFeaturesToPoints(feature2D1);
+        vector<cv::Point2f> points2D2 = Feature::convertFeaturesToPoints(feature2D2);
         F = cv::findFundamentalMat(points2D1,
                                    points2D2,
                                    cv::FM_RANSAC, params_.rel_pose_essential_error,
@@ -154,12 +144,14 @@ namespace ISfM
     };
     //////////////////////////////////////////////////////////////////////////////////////
     bool Initializer::RecoverPoseFromHomography(const cv::Mat &H,
-                                                const vector<cv::Point2f> &points2D1,
-                                                const vector<cv::Point2f> &points2D2,
+                                                const vector<Feature::Ptr> &feature2D1,
+                                                const vector<Feature::Ptr> &feature2D2,
                                                 const vector<bool> &inlier_mask_H)
     {
         vector<cv::Mat> Rs; // 用于输出
         vector<cv::Mat> ts;
+        vector<cv::Point2f> points2D1 = Feature::convertFeaturesToPoints(feature2D1);
+        vector<cv::Point2f> points2D2 = Feature::convertFeaturesToPoints(feature2D2);
         // 将单应性矩阵分解为旋转矩阵和平移向量
         cv::decomposeHomographyMat(H, K_, Rs, ts, cv::noArray());// Rs和ts有多个解
         size_t best_num_inlier = 0;
@@ -184,25 +176,34 @@ namespace ISfM
             size_t num_inliers = 0;
             double sum_residual = 0;
             double sum_tri_angle = 0;
-
+            size_t cnt_init_landmarks = 0;//初始化的路标数目
             for (size_t i = 0; i < points2D1.size(); ++i)
             {
-                cv::Vec3d point3D = Triangulate(P1, P2, points2D1[i], points2D2[i]);
+                cv::Vec3d p3d = Triangulate(P1, P2, points2D1[i], points2D2[i]);
 
-                bool has_positive_depth = Projection::HasPositiveDepth(point3D, Rwto1, t1, Rwto2, t2);
+                bool has_positive_depth = Projection::HasPositiveDepth(p3d, Rwto1, t1, Rwto2, t2);
                 // 计算重投影误差,points2D1是观测到的坐标
-                double error = Projection::CalculateReprojectionError(point3D,
+                double error = Projection::CalculateReprojectionError(p3d,
                                                                       points2D1[i], points2D2[i],
                                                                       Rwto1, t1, Rwto2, t2, K_);
                 // 计算视差角(parallax angle)
-                double tri_angle = Projection::CalculateParallaxAngle(point3D, Rwto1, t1, Rwto2, t2);
+                double tri_angle = Projection::CalculateParallaxAngle(p3d, Rwto1, t1, Rwto2, t2);
 
-                points3D[i] = point3D;
+                
+                points3D[i] = p3d;
                 tri_angles[i] = tri_angle;
                 residuals[i] = error;
 
                 if (has_positive_depth && error < params_.init_tri_max_error)
                 {
+                    auto new_map_point = MapPoint::CreateNewMappoint();//工厂模式创建一个新的地图点
+                    new_map_point->SetPos(p3d);
+                    new_map_point->AddObservation(feature2D1[i]);
+                    new_map_point->AddObservation(feature2D2[i]);
+                    feature2D1[i]->map_point_ = new_map_point;
+                    feature2D2[i]->map_point_ = new_map_point;
+                    map_->InsertMapPoint(new_map_point);// 地图插入新的地图点
+                    cnt_init_landmarks++;
 
                     num_inliers += 1;
                     inlier_mask[i] = true;
@@ -247,6 +248,11 @@ namespace ISfM
                 statistics_.tri_angles = move(tri_angles);
                 statistics_.residuals = move(residuals);
                 statistics_.inlier_mask = move(inlier_mask);
+
+                frameone_->SetKeyFrame();
+                map_->InsertKeyFrame(frameone_);
+                frametwo_->SetKeyFrame();
+                map_->InsertKeyFrame(frametwo_);//对Map类对象来说,地图里面应当多了一个关键帧,所以要将这个关键帧加到地图中去
             }
         }
         // 判断是否初始化成功
@@ -267,13 +273,14 @@ namespace ISfM
     };
     //////////////////////////////////////////////////////////////////////////////////////
     bool Initializer::RecoverPoseFromFundanmental(const cv::Mat &F,
-                                                  const vector<cv::Point2f> &points2D1,
-                                                  const vector<cv::Point2f> &points2D2,
+                                                  const vector<Feature::Ptr> &feature2D1,
+                                                  const vector<Feature::Ptr> &feature2D2,
                                                   const vector<bool> &inlier_mask_F)
     {
         cv::Mat E, Rwto1, t1, Rwto2, t2;
         cv::Mat inlier;
-
+        vector<cv::Point2f> points2D1 = Feature::convertFeaturesToPoints(feature2D1);
+        vector<cv::Point2f> points2D2 = Feature::convertFeaturesToPoints(feature2D2);
         // 由于使用 E = K_.t() * F * K_
         // 然后recoverPose会出错
         // 所以直接使用opencv的findEssentialMat
@@ -299,34 +306,34 @@ namespace ISfM
         size_t num_inliers = 0;
         double sum_residual = 0.0;
         double sum_tri_angle = 0.0;
-
+        size_t cnt_init_landmarks = 0;//初始化的路标数目
         for (size_t i = 0; i < points2D1.size(); ++i)
         {
             if (inlier.at<uchar>(i, 0) == 0)
                 continue;
-
             if (!inlier_mask_F[i])
                 continue;
-
-            cv::Vec3d point3D = Triangulate(P1, P2, points2D1[i], points2D2[i]);
-
-            // 三角测量出来的点，要满足
-            // 正深度
-            // 重投影误差小于阈值
-            // 三角测量的角度大于阈值
-
-            bool has_positive_depth = Projection::HasPositiveDepth(point3D, Rwto1, t1, Rwto2, t2);
-            double error = Projection::CalculateReprojectionError(point3D, points2D1[i], points2D2[i],
+            cv::Vec3d p3d = Triangulate(P1, P2, points2D1[i], points2D2[i]);
+            // 三角测量出来的点，要满足 正深度 重投影误差小于阈值 三角测量的角度大于阈值
+            bool has_positive_depth = Projection::HasPositiveDepth(p3d, Rwto1, t1, Rwto2, t2);
+            double error = Projection::CalculateReprojectionError(p3d, points2D1[i], points2D2[i],
                                                                   Rwto1, t1, Rwto2, t2, K_);
+            double tri_angle = Projection::CalculateParallaxAngle(p3d, Rwto1, t1, Rwto2, t2);
 
-            double tri_angle = Projection::CalculateParallaxAngle(point3D, Rwto1, t1, Rwto2, t2);
-
-            points3D[i] = point3D;
+            points3D[i] = p3d;
             tri_angles[i] = tri_angle;
             residuals[i] = error;
 
             if (has_positive_depth && error < params_.init_tri_max_error)
             {
+                auto new_map_point = MapPoint::CreateNewMappoint();//工厂模式创建一个新的地图点
+                new_map_point->SetPos(p3d);
+                new_map_point->AddObservation(feature2D1[i]);
+                new_map_point->AddObservation(feature2D2[i]);
+                feature2D1[i]->map_point_ = new_map_point;
+                feature2D2[i]->map_point_ = new_map_point;
+                map_->InsertMapPoint(new_map_point);// 地图插入新的地图点
+                cnt_init_landmarks++;
 
                 num_inliers += 1;
                 inlier_mask[i] = true;
@@ -371,6 +378,11 @@ namespace ISfM
             return false;
         }
 
+        frameone_->SetKeyFrame();
+        map_->InsertKeyFrame(frameone_);
+        frametwo_->SetKeyFrame();
+        map_->InsertKeyFrame(frametwo_);//对Map类对象来说,地图里面应当多了一个关键帧,所以要将这个关键帧加到地图中去
+        
         statistics_.is_succeed = true;
         statistics_.method = "Essential";
         statistics_.num_inliers = num_inliers;
@@ -406,14 +418,14 @@ namespace ISfM
         cv::Mat u, w, vt; // w存储奇异值，u和vt存储相应的左和右奇异向量
         cv::SVD::compute(A, w, u, vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
         // 最小特征值所对应的特征向量, 就是该三维点的齐次坐标形式(x,y,z,w),非齐次(x,y,z)
-        cv::Mat point3D = vt.row(3).t();
-        assert(point3D.type() == CV_64F);
+        cv::Mat p3d = vt.row(3).t();
+        assert(p3d.type() == CV_64F);
         // 从齐次坐标 -> 非齐次坐标
-        point3D = point3D.rowRange(0, 3) / point3D.at<double>(3, 0);
+        p3d = p3d.rowRange(0, 3) / p3d.at<double>(3, 0);
 
-        double x = point3D.at<double>(0);
-        double y = point3D.at<double>(1);
-        double z = point3D.at<double>(2);
+        double x = p3d.at<double>(0);
+        double y = p3d.at<double>(1);
+        double z = p3d.at<double>(2);
         return cv::Vec3d(x, y, z);
     };
     //////////////////////////////////////////////////////////////////////////////////////

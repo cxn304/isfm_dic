@@ -4,6 +4,7 @@
 #include "common.h"
 #include "frame.h"
 #include "point3d.h"
+#include "feature.h"
 
 namespace ISfM
 {
@@ -17,15 +18,15 @@ namespace ISfM
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
         typedef std::shared_ptr<Map> Ptr;
-        typedef std::unordered_map<unsigned long, Poind3d::Ptr> LandmarksType;
+        typedef std::unordered_map<unsigned long, MapPoint::Ptr> LandmarksType;
         typedef std::unordered_map<unsigned long, Frame::Ptr> KeyframesType;
 
         Map() {}
 
         /// 增加一个关键帧
         void InsertKeyFrame(Frame::Ptr frame);
-        /// 增加一个地图顶点
-        void InsertMapPoint(Poind3d::Ptr map_point);
+        /// 增加一个地图点
+        void InsertMapPoint(MapPoint::Ptr map_point);
 
         /// 获取所有地图点
         LandmarksType GetAllMapPoints()

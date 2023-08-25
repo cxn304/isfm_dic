@@ -45,8 +45,6 @@ namespace ISfM
 
     public:
         MapBuilder(const string &database_path, const MapBuilder::Parameters &params);
-
-        
         // 重建时，需要调用的函数
         // 调用SetUp() 设置重建时需要加载的数据
         // 调用DoBuild() 来进行重建

@@ -2,32 +2,34 @@
 #ifndef POINT3D_H
 #define POINT3D_H
 #include "common.h"
+#include "feature.h"
 
 namespace ISfM
 {
-    struct Poind3d
+    struct Feature;
+    struct MapPoint
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-        typedef std::shared_ptr<Poind3d> Ptr;
+        typedef std::shared_ptr<MapPoint> Ptr;
         unsigned long id_ = 0; // ID
         bool is_outlier_ = false;
-        Vec3 pos_ = Vec3::Zero(); // Position in world
+        cv::Vec3d pos_ ; // Position in world
         std::mutex data_mutex_;
         int observed_times_ = 0; // being observed by feature matching algo.
-        std::list<std::weak_ptr<Feature>> observations_;
+        std::list<std::weak_ptr<ISfM::Feature>> observations_; //observations_是存储feature的list
 
-        Poind3d() {}
+        MapPoint() {}
 
-        Poind3d(long id, Vec3 position);
+        MapPoint(long id, cv::Vec3d position);
 
-        Vec3 Pos()
+        cv::Vec3d Pos()
         {
             std::unique_lock<std::mutex> lck(data_mutex_);
             return pos_;
         }
 
-        void SetPos(const Vec3 &pos)
+        void SetPos(const cv::Vec3d &pos)
         {
             std::unique_lock<std::mutex> lck(data_mutex_);
             pos_ = pos;
@@ -49,7 +51,7 @@ namespace ISfM
         }
 
         // factory function
-        static Poind3d::Ptr CreateNewMappoint();
+        static MapPoint::Ptr CreateNewMappoint();
     };
 }
 

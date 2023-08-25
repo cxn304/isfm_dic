@@ -3,10 +3,30 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "CMake: Compile and Debug",
+            "name": "CMake: feature_extract_match",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/bin/feature_extract",
+            "program": "${workspaceFolder}/bin/feature_extract_match",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "build",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "CMake: construction",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/construct",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

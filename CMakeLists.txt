@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 project(ISfM)
 
 set(CMAKE_BUILD_TYPE "Debug")
-
+add_compile_options(-fPIC)
 # set(CMAKE_CXX_FLAGS "-std=c++14 -Wall") # -Wall：开启所有警告(设置c++14标准,并设置编译提示)
 # set(CMAKE_CXX_FLAGS_DEBUG  "-std=c++14 -O3 -fopenmp -pthread")
 
@@ -37,12 +37,12 @@ include_directories(${G2O_INCLUDE_DIRS})
 # include_directories(${GLOG_INCLUDE_DIRS})
 
 # gtest
-find_package(GTest REQUIRED)
-include_directories(${GTEST_INCLUDE_DIRS})
+# find_package(GTest REQUIRED)
+# include_directories(${GTEST_INCLUDE_DIRS})
 
 # gflags
-find_package(GFlags REQUIRED)
-include_directories(${GFLAGS_INCLUDE_DIRS})
+# find_package(GFlags REQUIRED)
+# include_directories(${GFLAGS_INCLUDE_DIRS})
 
 # csparse
 find_package(CSparse REQUIRED)
@@ -57,9 +57,9 @@ set(THIRD_PARTY_LIBS
         ${Sophus_LIBRARIES}
         ${Pangolin_LIBRARIES} GL GLU GLEW glut
         g2o_core g2o_stuff g2o_types_sba g2o_solver_csparse g2o_csparse_extension glog
-        ${GTEST_BOTH_LIBRARIES}
-        ${GLOG_LIBRARIES}
-        ${GFLAGS_LIBRARIES}
+        # ${GTEST_BOTH_LIBRARIES}
+        # ${GLOG_LIBRARIES}
+        # ${GFLAGS_LIBRARIES}
         pthread
         ${CSPARSE_LIBRARY}
         ${DBoW3_LIBS}

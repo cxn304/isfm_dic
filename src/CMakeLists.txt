@@ -5,8 +5,14 @@ add_library(ISfM SHARED
         inits.cpp
         projection.cpp
         triangulate.cpp
-        #feature_utils.cpp
-        #map_builder.cpp
+        # feature_utils.cpp
+        # map_builder.cpp
+        # scene_graph.cpp
+        point3d.cpp
+        frame.cpp
+        # steps.cpp
+        map.cpp
+        feature.cpp
         )
 # 创建库
 # add_library(ISfM SHARED ${SRC_FILES})
