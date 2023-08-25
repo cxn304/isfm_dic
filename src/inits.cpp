@@ -36,6 +36,7 @@ namespace ISfM
         new_frame1->img_name = image_loader.filenames_[1];
         new_frame1->id_ = 1;
         frametwo_ = new_frame1;
+        matchesMap_ = Cdate.matchesMap_;
     };
     //////////////////////////////////////////////////////////////////////////////////////
     Initializer::Statistics Initializer::Initialize()
@@ -46,8 +47,23 @@ namespace ISfM
         vector<bool> inlier_mask_F;
         size_t num_inliers_H;
         size_t num_inliers_F;
-        vector<Feature::Ptr> pts1 = features_[0];
-        vector<Feature::Ptr> pts2 = features_[1];
+        auto it = matchesMap_.begin();
+        vector<Feature::Ptr> pts1;
+        vector<Feature::Ptr> pts2;
+        // 检查迭代器是否指向有效元素
+        if (it != matchesMap_.end())
+        {
+            // 通过迭代器的指针访问第一个std::vector<cv::DMatch>的值
+            std::vector<cv::DMatch> firstVector = it->second;
+
+            for (const cv::DMatch &match : firstVector)
+            {
+                int trainIdx = match.trainIdx; // 获取trainIdx
+                int queryIdx = match.queryIdx; // 获取queryIdx
+                pts1.push_back(features_[0][trainIdx]); // 为什么pts1在47的时候有问题
+                pts2.push_back(features_[1][queryIdx]);
+            }
+        }
 
         FindHomography(pts1, pts2, H, inlier_mask_H, num_inliers_H);
         FindFundanmental(pts1, pts2, F, inlier_mask_F, num_inliers_F);

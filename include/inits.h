@@ -104,6 +104,7 @@ namespace ISfM
         Frame::Ptr frameone_ = nullptr;  // 选定的一帧
         Frame::Ptr frametwo_ = nullptr;  // 选定的另一帧
         vector<vector<Feature::Ptr>> features_;  // 转换后的 Feature 对象,2维点
+        std::map<std::pair<int, int>, std::vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果
     };
 }
 #endif

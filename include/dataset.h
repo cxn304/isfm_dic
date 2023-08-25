@@ -54,11 +54,11 @@ namespace ISfM
         vector<cv::Mat> descriptors_; // descriptor vectors
         vector<string> filenames_;
         Eigen::MatrixXd similarityMatrix_;
+        std::map<std::pair<int, int>, std::vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果
     private:
         map<string, pair<vector<cv::KeyPoint>, cv::Mat>> features_;
         map<int,string> file_paths_;
-        cv::Mat dbo_score_;
-        std::map<std::pair<int, int>, std::vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果
+        cv::Mat dbo_score_; 
     };
 }
 #endif
