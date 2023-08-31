@@ -54,6 +54,6 @@ int main(int argc, char **argv)
             }
         }
     }
-
+    cout << "VO exit";
     return 0;
 }
