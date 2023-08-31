@@ -11,7 +11,7 @@ namespace ISfM
 
     /**
      * @brief 地图
-     * 和地图的交互：前端调用InsertKeyframe和InsertMapPoint插入新帧和地图点，后端维护地图的结构，判定outlier/剔除等等
+     * 和地图的交互:前端调用InsertKeyframe和InsertMapPoint插入新帧和地图点,后端维护地图的结构,判定outlier/剔除等等
      */
     class Map
     {
@@ -71,7 +71,7 @@ namespace ISfM
         Frame::Ptr current_frame_ = nullptr;
 
         // settings
-        int num_active_keyframes_ = 7; // 激活的关键帧数量
+        int num_active_keyframes_ = 5; // 激活的关键帧数量
     };
 } // namespace myslam
 

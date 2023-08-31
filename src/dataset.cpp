@@ -1,5 +1,4 @@
 #include "dataset.h"
-#include <boost/format.hpp>
 
 using namespace std;
 namespace ISfM
@@ -11,12 +10,10 @@ namespace ISfM
         char cwd[PATH_MAX];
         getcwd(cwd, sizeof(cwd));
         string current_dir(cwd);
-        // 创建ORB特征提取器对象
-        cv::Ptr<cv::Feature2D> orb = cv::ORB::create();
         // 创建文件存储对象,包括features和descriptor,文件名
-        cv::FileStorage fs(current_dir + "/data/features.yml", cv::FileStorage::WRITE);
+        cv::FileStorage fs("./data/features.yml", cv::FileStorage::WRITE);
         std::ofstream file("./data/feature_name.txt"); // 打开一个输出文件流
-        // 创建词袋模型存储mat
+        // 创建描述符
         vector<cv::Mat> descriptors;
         // 加载第一张图像
         cv::Mat image = cv::imread(file_paths[0], cv::IMREAD_GRAYSCALE);
@@ -57,7 +54,6 @@ namespace ISfM
                 file << filename << '\n';
             }
             descriptors.push_back(descriptor);
-            features_[filename] = make_pair(kpts, descriptor);
             file_paths_[img_id] = file_path;
             img_id++;
         }
@@ -65,27 +61,27 @@ namespace ISfM
         fs.release();
         file.close();
         // save vocab data base
-        DBoW3::Vocabulary vocab;
-        vocab.create(descriptors);
+        // DBoW3::Vocabulary vocab;
+        // vocab.create(descriptors);
         // cout << "vocabulary info: " << vocab << endl;
-        string file_path = current_dir + "/data/vocab_larger.yml.gz";
-        vocab.save(file_path);
-        saveSimilarMatrix(vocab, "./data/features.yml", "./data/feature_name.txt");
+        // string file_path = current_dir + "/data/vocab_larger.yml.gz";
+        // vocab.save(file_path);
+        // saveSimilarMatrix(vocab, "./data/features.yml", "./data/feature_name.txt");
         cout << "features detect done" << endl;
     }
 
     int Dataset::DetectFeatures(const cv::Mat &image, vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
     {
         cv::Mat mask(image.size(), CV_8UC1, 255);
-        // 创建 ORB 对象
-        cv::Ptr<cv::ORB> orb = cv::ORB::create(2000);
+        // 创建 SIFT 对象
+        cv::Ptr<cv::SIFT> sifts = cv::SIFT::create(2000);
         // 检测特征点
-        orb->detect(image, keypoints);
+        sifts->detect(image, keypoints);
         // 计算特征描述符
-        orb->compute(image, keypoints, descriptors);
+        sifts->compute(image, keypoints, descriptors);
         // 设置特征点之间的最小距离阈值
         float minDistancePixels = 1.0f;
-        // 迭代遍历特征点，根据距离阈值筛选特征点
+        // 迭代遍历特征点,根据距离阈值筛选特征点
         std::vector<cv::KeyPoint> filteredKeypoints;
         vector<int> extracted_id;
         for (int i = 0; i < keypoints.size(); ++i)
@@ -125,6 +121,7 @@ namespace ISfM
         return keypoints.size();
     }
 
+    /*
     // using DBoW3 to find similar image, for initialization
     void Dataset::saveSimilarMatrix(DBoW3::Vocabulary &vocab,
                                     const string &feature_path, const string &filename_path)
@@ -156,6 +153,7 @@ namespace ISfM
         file << "matrix" << similarityMatrix << "size" << similarityMatrix.cols;
         file.release();
     };
+    */
     ////////////////////////////////////////////////////////////////////////////////////
     // using orb nums to find similar image, for initialization
     void Dataset::saveORBSimilar(const string feature_path, const string filename_path)
@@ -273,7 +271,7 @@ namespace ISfM
         for (int i = 0; i < file_paths_.size() - 1; ++i)
         {
             std::vector<cv::DMatch> matches;
-            ComputeMatches(descriptors_[i], descriptors_[i + 1], matches, 0.8);
+            ComputeMatches(descriptors_[i], descriptors_[i + 1], matches, 0.9);
             // 构建图像对
             std::pair<int, int> imagePair(i, i + 1);
             matchesMap_[imagePair] = matches;

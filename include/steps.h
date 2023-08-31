@@ -11,7 +11,7 @@
 #include "camera.h"
 #include "feature.h"
 #include "triangulate.h"
-#include "SnavelyReprojectionError.h"
+#include "g2o_types.h"
 
 namespace ISfM
 {
@@ -25,7 +25,7 @@ namespace ISfM
 
     /**
      * 优化过程
-     * 估计当前帧Pose，在满足关键帧条件时向地图加入关键帧并触发优化
+     * 估计当前帧Pose,在满足关键帧条件时向地图加入关键帧并触发优化
      */
     class Steps
     {
@@ -33,19 +33,26 @@ namespace ISfM
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
         typedef std::shared_ptr<Steps> Ptr;
 
-        Steps();
+        Steps(Initializer::Returns &returns, ImageLoader &Cimage_loader){}; // 构造函数
 
-        /// 外部接口，添加一个帧(图像)并计算其定位结果
+        /// 外部接口,添加一个帧(图像)并计算其定位结果
         bool AddFrame(Frame::Ptr frame);
 
-        /// Set函数
         void SetMap(Map::Ptr map) { map_ = map; }
 
         ConstructionStatus GetStatus() const { return status_; }
-        void SetCameras(Camera::Ptr camera_one, Camera::Ptr camera_two) {
-        camera_one_ = camera_one;
-        camera_two_ = camera_two;
-    }
+        
+        void SetCameras(Camera::Ptr camera_one)
+        {
+            camera_one_ = camera_one;
+        }
+
+        std::vector<Frame::Ptr> getFrames() const
+        {
+            return frames_;
+        }
+        
+        void Optimize(Map::KeyframesType &keyframes,Map::LandmarksType &landmarks);
 
     private:
         /**
@@ -61,12 +68,6 @@ namespace ISfM
         bool Reset();
 
         /**
-         * Track with last frame
-         * @return num of tracked points
-         */
-        int TrackLastFrame();
-
-        /**
          * estimate current frame's pose
          * @return num of inliers
          */
@@ -77,19 +78,6 @@ namespace ISfM
          * @return true if success
          */
         bool InsertKeyframe();
-
-        /**
-         * Try init the frontend with stereo images saved in current_frame_
-         * @return true if success
-         */
-        bool Init(Initializer initialize_);
-
-        /**
-         * Detect features in left image in current_frame_
-         * keypoints will be saved in current_frame_
-         * @return
-         */
-        int DetectFeatures();
 
         /**
          * Find the corresponding features in right image of current_frame_
@@ -107,7 +95,7 @@ namespace ISfM
          * Triangulate the 2D points in current frame
          * @return num of triangulated points
          */
-        int TriangulateNewPoints();
+        int TriangulateNewPoints(Frame::Ptr &frame_one, Frame::Ptr &frame_two);
 
         /**
          * Set the features in keyframe as new observation of the map points
@@ -122,23 +110,25 @@ namespace ISfM
         Frame::Ptr current_frame_ = nullptr; // 当前帧, 这里也承载相机的职能算了
         Frame::Ptr last_frame_ = nullptr;    // 上一帧
         Camera::Ptr camera_one_ = nullptr;  // 当前相机
-        Camera::Ptr camera_two_ = nullptr;  // 当前相机2
 
-        Map::Ptr map_ = nullptr;
-
-        SE3 relative_motion_; // 当前帧与上一帧的相对运动，用于估计当前帧pose初值
+        SE3 relative_motion_; // 当前帧与上一帧的相对运动,用于估计当前帧pose初值
 
         int tracking_inliers_ = 0; // inliers, used for testing new keyframes
+        Vec6 intrinsic_ = Vec6::Zero();
+        Map::Ptr map_ = nullptr;
+        vector<Frame::Ptr> frames_;                          // 所有的frame信息
+        Frame::Ptr frameone_ = nullptr;                      // 选定的一帧,这里暂时第一第二帧,记住要初始化pose
+        Frame::Ptr frametwo_ = nullptr;                      // 选定的另一帧,也传递到step里面
+        vector<vector<Feature::Ptr>> features_;              // 转换后的 Feature 对象,2维点,要传递到step里面的
+        map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
+        ImageLoader image_loader_;
 
         // params
         int num_features_ = 200;
-        int num_features_init_ = 100;
         int num_features_tracking_ = 50;
         int num_features_tracking_bad_ = 20;
         int num_features_needed_for_keyframe_ = 80;
 
-        // utilities
-        cv::Ptr<cv::GFTTDetector> gftt_; // feature detector in opencv
     };
 
 } // namespace myslam

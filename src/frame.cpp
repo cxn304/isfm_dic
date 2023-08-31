@@ -3,8 +3,8 @@
 namespace ISfM
 {
 
-    Frame::Frame(long id, const SE3 &pose, const Mat &img)
-        : id_(id), pose_(pose), img_d(img) {}
+    Frame::Frame(long id, const SE3 &pose)
+        : id_(id), pose_(pose) {}
 
     Frame::Ptr Frame::CreateFrame()
     {

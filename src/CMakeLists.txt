@@ -10,9 +10,10 @@ add_library(ISfM SHARED
         # scene_graph.cpp
         point3d.cpp
         frame.cpp
-        # steps.cpp
+        steps.cpp
         map.cpp
         feature.cpp
+        camera.cpp
         )
 # 创建库
 # add_library(ISfM SHARED ${SRC_FILES})

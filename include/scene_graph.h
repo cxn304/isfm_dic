@@ -37,7 +37,7 @@ namespace ISfM
         /**
          * 判断SceneGraph中是否存在image_id这个图像
          * @param image_id      : 图片id
-         * @return              : 存在， 返回true； 否则，返回false.
+         * @return              : 存在, 返回true； 否则,返回false.
          */
         bool ExistsImage(const int image_id) const;
 
@@ -72,9 +72,9 @@ namespace ISfM
 
         /**
          * 向SceneGraph添加两幅图像的特征点匹配
-         * 需要注意的是，
-         *  (1) 已经调用过AddImage函数， 向SceneGraph中添加过image_id1和image_id2
-         *  (2) matches是经过交叉验证的(计算匹配时，默认已验证）
+         * 需要注意的是,
+         *  (1) 已经调用过AddImage函数, 向SceneGraph中添加过image_id1和image_id2
+         *  (2) matches是经过交叉验证的(计算匹配时,默认已验证）
          * @param image_id1     : 第一幅图像的id
          * @param image_id2     : 第二幅图像的id
          * @param matches       : 经过交叉验证的特征匹配
@@ -105,7 +105,7 @@ namespace ISfM
          * 判断第image_id1张图片的第point2D_idx个特征点是否存在匹配点
          * @param image_id      : 图像id
          * @param point2D_idx   : 特征点序号
-         * @return              : 存在匹配点， 返回true; 否则， 返回false.
+         * @return              : 存在匹配点, 返回true; 否则, 返回false.
          */
         bool HasCorrespondences(const int image_id, const int point2D_idx) const;
 
@@ -119,7 +119,7 @@ namespace ISfM
          *
          * @param image_id      : 图像id
          * @param point2D_idx   : 特征点序号
-         * @return              : 如果是TwoViewObservation， 返回true; 否则， 返回false.
+         * @return              : 如果是TwoViewObservation, 返回true; 否则, 返回false.
          */
         bool IsTwoViewObservation(const int image_id, const int point2D_idx) const;
 

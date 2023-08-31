@@ -3,7 +3,7 @@ project(ISfM)
 
 set(CMAKE_BUILD_TYPE "Debug")
 add_compile_options(-fPIC)
-# set(CMAKE_CXX_FLAGS "-std=c++14 -Wall") # -Wall：开启所有警告(设置c++14标准,并设置编译提示)
+# set(CMAKE_CXX_FLAGS "-std=c++14 -Wall") # -Wall:开启所有警告(设置c++14标准,并设置编译提示)
 # set(CMAKE_CXX_FLAGS_DEBUG  "-std=c++14 -O3 -fopenmp -pthread")
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)#设置依赖包的文件夹
@@ -21,8 +21,8 @@ find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR})
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 # pangolin
-find_package(Pangolin REQUIRED)
-include_directories(${Pangolin_INCLUDE_DIRS})
+# find_package(Pangolin REQUIRED)
+# include_directories(${Pangolin_INCLUDE_DIRS})
 
 # Sophus
 find_package(Sophus REQUIRED)
@@ -33,8 +33,8 @@ find_package(G2O REQUIRED)
 include_directories(${G2O_INCLUDE_DIRS})
 
 # glog
-# find_package(Glog REQUIRED)
-# include_directories(${GLOG_INCLUDE_DIRS})
+find_package(Glog REQUIRED)
+include_directories(${GLOG_INCLUDE_DIRS})
 
 # gtest
 # find_package(GTest REQUIRED)
@@ -49,20 +49,21 @@ find_package(CSparse REQUIRED)
 include_directories(${CSPARSE_INCLUDE_DIR})
 
 # dbow3 
-set( DBoW3_INCLUDE_DIRS "/usr/local/include" )
-set( DBoW3_LIBS "/usr/local/lib/libDBoW3.so" )
+# set( DBoW3_INCLUDE_DIRS "/usr/local/include" )
+# set( DBoW3_LIBS "/usr/local/lib/libDBoW3.so" )
 
 set(THIRD_PARTY_LIBS
         ${OpenCV_LIBS}
         ${Sophus_LIBRARIES}
-        ${Pangolin_LIBRARIES} GL GLU GLEW glut
+        # ${Pangolin_LIBRARIES} 
+        # GL GLU GLEW glut
         g2o_core g2o_stuff g2o_types_sba g2o_solver_csparse g2o_csparse_extension glog
         # ${GTEST_BOTH_LIBRARIES}
         # ${GLOG_LIBRARIES}
         # ${GFLAGS_LIBRARIES}
         pthread
         ${CSPARSE_LIBRARY}
-        ${DBoW3_LIBS}
+        # ${DBoW3_LIBS}
         )#将需要的包,打包放到一个名称下,使得代码更简洁
 
 enable_testing()#启用对当前目录或以下目录的测试

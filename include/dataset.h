@@ -5,16 +5,12 @@
 #include <vector>
 #include <string>
 #include <map>
-#include <opencv2/opencv.hpp>
-#include <opencv2/core.hpp>
-#include <opencv2/features2d.hpp>
-#include <opencv2/highgui.hpp>
 #include <filesystem>
-#include "DBoW3/DBoW3.h"
+// #include "DBoW3/DBoW3.h"
 #include "files.h"
 #include "common.h"
 #include "frame.h"
-#include "feature_utils.h"
+#include <boost/format.hpp>
 
 using namespace std;
 namespace ISfM
@@ -36,8 +32,8 @@ namespace ISfM
         getFeatures() const { return features_; } // image name and their kpts, des
         cv::Mat getDboScore() const { return dbo_score_; }
         void setDboScore(const cv::Mat &score) { dbo_score_ = score; }
-        void saveSimilarMatrix(DBoW3::Vocabulary &vocab,
-                               const string &feature_path, const string &filename_path);
+        // void saveSimilarMatrix(DBoW3::Vocabulary &vocab,
+        //                        const string &feature_path, const string &filename_path);
         void saveORBSimilar(const string feature_path, const string filename_path);
         void readImageSave(const string feature_path, const string filename_path);
         cv::Mat readDateSet(const string &matrixPath, const string &feature_path, const string &filename_path,

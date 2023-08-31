@@ -8,8 +8,8 @@ namespace ISfM
     class Projection
     {
     public:
-    //函数重载是指在同一个作用域内，可以定义具有相同名称但参数列表不同的多个函数。
-    //编译器根据函数调用时提供的参数类型和数量来确定要调用哪个函数。
+    //函数重载是指在同一个作用域内,可以定义具有相同名称但参数列表不同的多个函数.
+    //编译器根据函数调用时提供的参数类型和数量来确定要调用哪个函数.
         static bool HasPositiveDepth(const cv::Vec3d &point3D,
                                      const cv::Mat &R,
                                      const cv::Mat &t);

@@ -1,6 +1,5 @@
 #include "inits.h"
 
-
 using namespace std;
 namespace ISfM
 {
@@ -18,28 +17,35 @@ namespace ISfM
         // 遍历 kpoints_, 将二维特征点转换为Feature对象
         for (int i = 0; i < Cdate.kpoints_.size(); i++)
         {
-            std::vector<Feature::Ptr> featureRow;
+            vector<Feature::Ptr> featureRow;
 
             for (int j = 0; j < Cdate.kpoints_[i].size(); j++)
             {
                 const cv::KeyPoint &kp = Cdate.kpoints_[i][j];
-                Feature::Ptr feature = std::make_shared<Feature>(i, kp);
+                Feature::Ptr feature = make_shared<Feature>(i, kp);
+
                 featureRow.push_back(feature);
             }
             features_.push_back(featureRow);
         }
-        auto new_frame = Frame::CreateFrame();//返回Frame::Ptr类型的东西
-        new_frame->img_name = image_loader.filenames_[0];
-        new_frame->id_ = 0;
-        frameone_ = new_frame;
-        auto new_frame1 = Frame::CreateFrame();//返回Frame::Ptr类型的东西
-        new_frame1->img_name = image_loader.filenames_[1];
-        new_frame1->id_ = 1;
-        frametwo_ = new_frame1;
+        // 建立所有的frame
+        for (int i = 0; i < image_loader_.filenames_.size(); i++) 
+        {
+            auto frame = Frame::CreateFrame();
+            for (auto &feature_tmp : features_[i])
+            {
+                frame->features_img_.push_back(feature_tmp); // 将当前图片里的所有特征点都加入frame里面
+                feature_tmp->frame_ = frame;    // 这些特征点都和当前frame关联起来
+            }
+            frame->img_name = image_loader_.filenames_[frame->id_];
+            frames_.push_back(frame);
+        }
+
         matchesMap_ = Cdate.matchesMap_;
+        map_ = Map::Ptr(new Map);
     };
     //////////////////////////////////////////////////////////////////////////////////////
-    Initializer::Statistics Initializer::Initialize()
+    Initializer::Returns Initializer::Initialize()
     {
         cv::Mat H;
         cv::Mat F;
@@ -53,15 +59,15 @@ namespace ISfM
         // 检查迭代器是否指向有效元素
         if (it != matchesMap_.end())
         {
-            // 通过迭代器的指针访问第一个std::vector<cv::DMatch>的值
-            std::vector<cv::DMatch> firstVector = it->second;
+            // 通过迭代器的指针访问第一个vector<cv::DMatch>的值
+            vector<cv::DMatch> firstVector = it->second;
 
             for (const cv::DMatch &match : firstVector)
             {
-                int trainIdx = match.trainIdx; // 获取trainIdx
-                int queryIdx = match.queryIdx; // 获取queryIdx
-                pts1.push_back(features_[0][trainIdx]); // 为什么pts1在47的时候有问题
-                pts2.push_back(features_[1][queryIdx]);
+                int trainIdx = match.trainIdx;          // 获取trainIdx
+                int queryIdx = match.queryIdx;          // 获取queryIdx
+                pts1.push_back(features_[0][queryIdx]); // queryIdx是匹配时的第一张图片
+                pts2.push_back(features_[1][trainIdx]);
             }
         }
 
@@ -95,8 +101,13 @@ namespace ISfM
         }
 
         PrintStatistics(statistics_);
+        returns_.K_ = K_;
+        returns_.features_ = features_;
+        returns_.map_ = map_;
+        returns_.matchesMap_ = matchesMap_;
+        returns_.frames_ = frames_;
 
-        return statistics_;
+        return returns_;
     };
 
     /////////////////////////////要注意的是feature2D1和feature2D2得是对应点////////////////////////////////
@@ -169,30 +180,25 @@ namespace ISfM
         vector<cv::Point2f> points2D1 = Feature::convertFeaturesToPoints(feature2D1);
         vector<cv::Point2f> points2D2 = Feature::convertFeaturesToPoints(feature2D2);
         // 将单应性矩阵分解为旋转矩阵和平移向量
-        cv::decomposeHomographyMat(H, K_, Rs, ts, cv::noArray());// Rs和ts有多个解
+        cv::decomposeHomographyMat(H, K_, Rs, ts, cv::noArray()); // Rs和ts有多个解
         size_t best_num_inlier = 0;
         // 在这些解中找到最合适的解
         for (size_t k = 0; k < Rs.size(); ++k)
         {
             cv::Mat Rwto1 = cv::Mat::eye(3, 3, CV_64F); // 表示参考图像本身的旋转
             cv::Mat t1 = cv::Mat::zeros(3, 1, CV_64F);
-            cv::Mat Rwto2 = Rs[k]; //Rs表示从世界坐标系到相机2坐标系的旋转变换
+            cv::Mat Rwto2 = Rs[k]; // Rs表示从世界坐标系到相机2坐标系的旋转变换
             cv::Mat t2 = ts[k];
 
             cv::Mat P1, P2; // for output,投影矩阵
-
+            vector<double> tri_angles(points2D1.size(), 0);
             cv::hconcat(K_ * Rwto1, K_ * t1, P1); // 投影矩阵: 内参和外参的乘积
             cv::hconcat(K_ * Rwto2, K_ * t2, P2);
-
-            vector<cv::Vec3d> points3D(points2D1.size()); // 有几个观测点就对应几个三维点
-            vector<double> tri_angles(points2D1.size(), 0);
-            vector<double> residuals(points2D1.size(), numeric_limits<double>::max());
-            vector<bool> inlier_mask(points2D1.size(), false);
 
             size_t num_inliers = 0;
             double sum_residual = 0;
             double sum_tri_angle = 0;
-            size_t cnt_init_landmarks = 0;//初始化的路标数目
+            size_t cnt_init_landmarks = 0; // 初始化的路标数目
             for (size_t i = 0; i < points2D1.size(); ++i)
             {
                 cv::Vec3d p3d = Triangulate(P1, P2, points2D1[i], points2D2[i]);
@@ -205,30 +211,22 @@ namespace ISfM
                 // 计算视差角(parallax angle)
                 double tri_angle = Projection::CalculateParallaxAngle(p3d, Rwto1, t1, Rwto2, t2);
 
-                
-                points3D[i] = p3d;
                 tri_angles[i] = tri_angle;
-                residuals[i] = error;
 
                 if (has_positive_depth && error < params_.init_tri_max_error)
                 {
-                    auto new_map_point = MapPoint::CreateNewMappoint();//工厂模式创建一个新的地图点
+                    auto new_map_point = MapPoint::CreateNewMappoint(); // 工厂模式创建一个新的地图点
                     new_map_point->SetPos(p3d);
                     new_map_point->AddObservation(feature2D1[i]);
                     new_map_point->AddObservation(feature2D2[i]);
                     feature2D1[i]->map_point_ = new_map_point;
                     feature2D2[i]->map_point_ = new_map_point;
-                    map_->InsertMapPoint(new_map_point);// 地图插入新的地图点
+                    map_->InsertMapPoint(new_map_point); // 地图插入新的地图点
                     cnt_init_landmarks++;
 
                     num_inliers += 1;
-                    inlier_mask[i] = true;
                     sum_residual += error;
                     sum_tri_angle += tri_angle;
-                }
-                else
-                {
-                    inlier_mask[i] = false;
                 }
             }
             if (num_inliers > best_num_inlier)
@@ -256,19 +254,21 @@ namespace ISfM
                 statistics_.median_tri_angle = median_tri_angle;
                 statistics_.ave_tri_angle = ave_tri_angle;
                 statistics_.ave_residual = ave_residual;
-                statistics_.Rwto1 = Rwto1;
-                statistics_.t1 = t1;
-                statistics_.Rwto2 = Rwto2;
-                statistics_.t2 = t2;
-                statistics_.points3D = move(points3D);
-                statistics_.tri_angles = move(tri_angles);
-                statistics_.residuals = move(residuals);
-                statistics_.inlier_mask = move(inlier_mask);
 
-                frameone_->SetKeyFrame();
-                map_->InsertKeyFrame(frameone_);
-                frametwo_->SetKeyFrame();
-                map_->InsertKeyFrame(frametwo_);//对Map类对象来说,地图里面应当多了一个关键帧,所以要将这个关键帧加到地图中去
+                Eigen::Matrix3d R1;
+                Eigen::Vector3d t11;
+                cv::cv2eigen(Rwto1, R1);
+                cv::cv2eigen(t1, t11);
+                Sophus::SE3d pose1(R1, t11);
+                frames_[0]->SetPose(pose1);
+
+                Eigen::Matrix3d R2;
+                Eigen::Vector3d t22;
+                cv::cv2eigen(Rwto2, R2);
+                cv::cv2eigen(t2, t22);
+                Sophus::SE3d pose2(R2, t22);
+                frames_[1]->SetPose(pose2);
+
             }
         }
         // 判断是否初始化成功
@@ -313,16 +313,11 @@ namespace ISfM
         cv::Mat P1, P2;
         cv::hconcat(K_ * Rwto1, K_ * t1, P1);
         cv::hconcat(K_ * Rwto2, K_ * t2, P2);
-
-        vector<cv::Vec3d> points3D(points2D1.size());
         vector<double> tri_angles(points2D1.size(), 0);
-        vector<double> residuals(points2D1.size(), numeric_limits<double>::max());
-        vector<bool> inlier_mask(points2D1.size(), false);
-
         size_t num_inliers = 0;
         double sum_residual = 0.0;
         double sum_tri_angle = 0.0;
-        size_t cnt_init_landmarks = 0;//初始化的路标数目
+        size_t cnt_init_landmarks = 0; // 初始化的路标数目
         for (size_t i = 0; i < points2D1.size(); ++i)
         {
             if (inlier.at<uchar>(i, 0) == 0)
@@ -330,35 +325,28 @@ namespace ISfM
             if (!inlier_mask_F[i])
                 continue;
             cv::Vec3d p3d = Triangulate(P1, P2, points2D1[i], points2D2[i]);
-            // 三角测量出来的点，要满足 正深度 重投影误差小于阈值 三角测量的角度大于阈值
+            // 三角测量出来的点,要满足 正深度 重投影误差小于阈值 三角测量的角度大于阈值
             bool has_positive_depth = Projection::HasPositiveDepth(p3d, Rwto1, t1, Rwto2, t2);
             double error = Projection::CalculateReprojectionError(p3d, points2D1[i], points2D2[i],
                                                                   Rwto1, t1, Rwto2, t2, K_);
             double tri_angle = Projection::CalculateParallaxAngle(p3d, Rwto1, t1, Rwto2, t2);
 
-            points3D[i] = p3d;
             tri_angles[i] = tri_angle;
-            residuals[i] = error;
 
             if (has_positive_depth && error < params_.init_tri_max_error)
             {
-                auto new_map_point = MapPoint::CreateNewMappoint();//工厂模式创建一个新的地图点
+                auto new_map_point = MapPoint::CreateNewMappoint(); // 工厂模式创建一个新的地图点
                 new_map_point->SetPos(p3d);
                 new_map_point->AddObservation(feature2D1[i]);
                 new_map_point->AddObservation(feature2D2[i]);
                 feature2D1[i]->map_point_ = new_map_point;
                 feature2D2[i]->map_point_ = new_map_point;
-                map_->InsertMapPoint(new_map_point);// 地图插入新的地图点
+                map_->InsertMapPoint(new_map_point); // 地图插入新的地图点
                 cnt_init_landmarks++;
 
                 num_inliers += 1;
-                inlier_mask[i] = true;
                 sum_residual += error;
                 sum_tri_angle += tri_angle;
-            }
-            else
-            {
-                inlier_mask[i] = false;
             }
         }
 
@@ -394,25 +382,26 @@ namespace ISfM
             return false;
         }
 
-        frameone_->SetKeyFrame();
-        map_->InsertKeyFrame(frameone_);
-        frametwo_->SetKeyFrame();
-        map_->InsertKeyFrame(frametwo_);//对Map类对象来说,地图里面应当多了一个关键帧,所以要将这个关键帧加到地图中去
-        
+        Eigen::Matrix3d R1;
+        Eigen::Vector3d t11;
+        cv::cv2eigen(Rwto1, R1);
+        cv::cv2eigen(t1, t11);
+        Sophus::SE3d pose1(R1, t11);
+        frames_[0]->SetPose(pose1);
+
+        Eigen::Matrix3d R2;
+        Eigen::Vector3d t22;
+        cv::cv2eigen(Rwto2, R2);
+        cv::cv2eigen(t2, t22);
+        Sophus::SE3d pose2(R2, t22);
+        frames_[1]->SetPose(pose2);
+
         statistics_.is_succeed = true;
         statistics_.method = "Essential";
         statistics_.num_inliers = num_inliers;
         statistics_.median_tri_angle = median_tri_angle;
         statistics_.ave_tri_angle = ave_tri_angle;
         statistics_.ave_residual = ave_residual;
-        statistics_.Rwto1 = Rwto1;
-        statistics_.t1 = t1;
-        statistics_.Rwto2 = Rwto2;
-        statistics_.t2 = t2;
-        statistics_.points3D = move(points3D);
-        statistics_.tri_angles = move(tri_angles);
-        statistics_.residuals = move(residuals);
-        statistics_.inlier_mask = move(inlier_mask);
 
         return true;
     }
@@ -431,7 +420,7 @@ namespace ISfM
         A.row(3) = point2D2.y * P2.row(2) - P2.row(1);
         // s * [u, v, 1]^T = P * [X, Y, Z, 1]^T
         // [u, v]是二维图像上的点坐标,[X, Y, Z]是三维空间中的点坐标,P是相机投影矩阵,s是一个尺度因子
-        cv::Mat u, w, vt; // w存储奇异值，u和vt存储相应的左和右奇异向量
+        cv::Mat u, w, vt; // w存储奇异值,u和vt存储相应的左和右奇异向量
         cv::SVD::compute(A, w, u, vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
         // 最小特征值所对应的特征向量, 就是该三维点的齐次坐标形式(x,y,z,w),非齐次(x,y,z)
         cv::Mat p3d = vt.row(3).t();
@@ -448,42 +437,42 @@ namespace ISfM
     void Initializer::PrintStatistics(const Statistics &statistics)
     {
         const size_t kWidth = 20;
-        std::cout.flags(std::ios::left); // 左对齐
-        std::cout << std::endl;
-        std::cout << "--------------- Initialize Summary Start ---------------" << std::endl;
-        std::cout << std::setw(kWidth) << "Initialize status"
-                  << " : " << (statistics.is_succeed ? "true" : "false") << std::endl;
-        std::cout << std::setw(kWidth) << "Initialize method"
-                  << " : " << statistics.method << std::endl;
+        cout.flags(ios::left); // 左对齐
+        cout << endl;
+        cout << "--------------- Initialize Summary Start ---------------" << endl;
+        cout << setw(kWidth) << "Initialize status"
+                  << " : " << (statistics.is_succeed ? "true" : "false") << endl;
+        cout << setw(kWidth) << "Initialize method"
+                  << " : " << statistics.method << endl;
         if (!statistics.is_succeed)
         {
-            std::cout << std::setw(kWidth) << "Fail reason"
-                      << " : " << statistics.fail_reason << std::endl;
+            cout << setw(kWidth) << "Fail reason"
+                      << " : " << statistics.fail_reason << endl;
         }
-        std::cout << std::setw(kWidth) << "Num inliers H"
-                  << " : " << statistics.num_inliers_H << std::endl;
-        std::cout << std::setw(kWidth) << "Num inliers F"
-                  << " : " << statistics.num_inliers_F << std::endl;
-        std::cout << std::setw(kWidth) << "H F ratio"
-                  << " : " << statistics.H_F_ratio << std::endl;
-        std::cout << std::setw(kWidth) << "Num inliers"
-                  << " : " << statistics.num_inliers << std::endl;
-        std::cout << std::setw(kWidth) << "Median tri angle"
-                  << " : " << statistics.median_tri_angle << std::endl;
-        std::cout << std::setw(kWidth) << "Ave tri angle"
-                  << " : " << statistics.ave_tri_angle << std::endl;
-        std::cout << std::setw(kWidth) << "Ave residual"
-                  << " : " << statistics.ave_residual << std::endl;
-        std::cout << "--------------- Initialize Summary End ---------------" << std::endl;
-        std::cout << std::endl;
+        cout << setw(kWidth) << "Num inliers H"
+                  << " : " << statistics.num_inliers_H << endl;
+        cout << setw(kWidth) << "Num inliers F"
+                  << " : " << statistics.num_inliers_F << endl;
+        cout << setw(kWidth) << "H F ratio"
+                  << " : " << statistics.H_F_ratio << endl;
+        cout << setw(kWidth) << "Num inliers"
+                  << " : " << statistics.num_inliers << endl;
+        cout << setw(kWidth) << "Median tri angle"
+                  << " : " << statistics.median_tri_angle << endl;
+        cout << setw(kWidth) << "Ave tri angle"
+                  << " : " << statistics.ave_tri_angle << endl;
+        cout << setw(kWidth) << "Ave residual"
+                  << " : " << statistics.ave_residual << endl;
+        cout << "--------------- Initialize Summary End ---------------" << endl;
+        cout << endl;
     };
     //////////////////////////////////////////////////////////////////////////////////////
-    std::string Initializer::GetFailReason()
+    string Initializer::GetFailReason()
     {
 
         assert(!statistics_.is_succeed);
 
-        std::string fail_reason = "";
+        string fail_reason = "";
 
         if (statistics_.num_inliers < params_.rel_pose_min_num_inlier)
         {

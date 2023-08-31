@@ -146,7 +146,7 @@ namespace ISfM
         assert(t1.type() == CV_64F);
         assert(Rwto2.type() == CV_64F);
         assert(t2.type() == CV_64F);
-        //已知：Xc为相机坐标系，Xw为世界坐标系,Xc = R * Xw + t,所以Xw = R^-1 Xc - R^-1 * t
+        //已知:Xc为相机坐标系,Xw为世界坐标系,Xc = R * Xw + t,所以Xw = R^-1 Xc - R^-1 * t
         // 又因为Xc=0,0,0 所以光心在世界坐标系中的坐标Ow为:Ow = -R^-1 * t
         cv::Mat O1 = -Rwto1.t() * t1; // R1表示世界坐标系到相机1坐标系的转换
         cv::Mat O2 = -Rwto2.t() * t2; // -t2表示

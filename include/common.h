@@ -20,7 +20,8 @@
 // define the commonly included file to avoid a long include list
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-
+#include <Eigen/Dense>
+#include <opencv2/core/eigen.hpp>
 // typedefs for eigen
 // double matricies
 typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> MatXX;//Matrix<double, -1, -1>是一个动态大小的双精度浮点数矩阵
@@ -115,6 +116,6 @@ typedef Sophus::SO3d SO3;
 using cv::Mat;
 
 // glog
-#include <glog/logging.h>
+// #include <glog/logging.h>
 
 #endif  // MYSLAM_COMMON_INCLUDE_H

@@ -29,7 +29,7 @@ namespace ISfM
 
         if (svd.singularValues()[3] / svd.singularValues()[2] < 1e-2)
         {
-            // 解质量不好，放弃
+            // 解质量不好,放弃
             return true;
         }
         return false;
