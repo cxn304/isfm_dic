@@ -4,7 +4,7 @@ project(ISfM)
 set(CMAKE_BUILD_TYPE "Debug")
 add_compile_options(-fPIC)
 # set(CMAKE_CXX_FLAGS "-std=c++14 -Wall") # -Wall:开启所有警告(设置c++14标准,并设置编译提示)
-# set(CMAKE_CXX_FLAGS_DEBUG  "-std=c++14 -O3 -fopenmp -pthread")
+# set(CMAKE_CXX_FLAGS_DEBUG  "-std=c++17 -fopenmp")
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)#设置依赖包的文件夹
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)#设置可执行文件生成位置

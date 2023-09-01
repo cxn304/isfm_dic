@@ -29,10 +29,9 @@ int main(int argc, char **argv)
                                                       init_information.K_.at<double>(1, 1), init_information.K_.at<double>(0, 2),
                                                       init_information.K_.at<double>(1, 2));
     // step4: 初始化step的所有成员变量
-    ISfM::Steps::Ptr steps = std::make_shared<Steps>(init_information); // 这里要补充构造函数
+    ISfM::Steps::Ptr steps = std::make_shared<Steps>(init_information,Cimage_loader,camera_one); // 这里要补充构造函数
     steps->SetMap(map_);
-    steps->SetCameras(camera_one);
-    for (int i = 2; i < Cimage_loader.filenames_.size(); ++i)
+    for (int i = 0; i < Cimage_loader.filenames_.size(); ++i)
     {
         if (i < 2)
         {

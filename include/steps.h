@@ -1,9 +1,8 @@
 #pragma once
-#ifndef RECONSTRUCTION_H
-#define RECONSTRUCTION_H
+#ifndef STEPS_H
+#define STEPS_H
 
 #include <opencv2/features2d.hpp>
-#include <ceres/ceres.h>
 #include "common.h"
 #include "frame.h"
 #include "map.h"
@@ -17,7 +16,6 @@ namespace ISfM
 {
     enum class ConstructionStatus
     {
-        INITING,
         TRACKING_GOOD,
         TRACKING_BAD,
         LOST
@@ -33,7 +31,7 @@ namespace ISfM
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
         typedef std::shared_ptr<Steps> Ptr;
 
-        Steps(Initializer::Returns &returns, ImageLoader &Cimage_loader){}; // 构造函数
+        Steps(const Initializer::Returns &returns, const ImageLoader &Cimage_loader,Camera::Ptr &camera_one); // 构造函数
 
         /// 外部接口,添加一个帧(图像)并计算其定位结果
         bool AddFrame(Frame::Ptr frame);
@@ -102,10 +100,8 @@ namespace ISfM
          */
         void SetObservationsForKeyFrame();
 
-        void UpdateMap();
-
         // data
-        ConstructionStatus status_ = ConstructionStatus::INITING;
+        ConstructionStatus status_ = ConstructionStatus::TRACKING_GOOD;
 
         Frame::Ptr current_frame_ = nullptr; // 当前帧, 这里也承载相机的职能算了
         Frame::Ptr last_frame_ = nullptr;    // 上一帧
@@ -133,4 +129,4 @@ namespace ISfM
 
 } // namespace myslam
 
-#endif // RECONSTRUCTION_H
+#endif // STEPS_H

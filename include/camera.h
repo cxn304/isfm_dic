@@ -21,25 +21,26 @@ namespace ISfM
         {
         }
 
-        // return intrinsic matrix
-        Mat33 K() const
-        {
-            Mat33 k;
-            k << fx_, 0, cx_, 0, fy_, cy_, 0, 0, 1;
-            return k;
-        }
-
         Vec2 projectWithDistortion(double xp, double yp)
         {
             double r2 = xp * xp + yp * yp;
             double distortion = 1.0 + r2 * (k1_ + k2_ * r2);
             Vec2 predictions;
-            predictions[0] = fx_ * distortion * xp;
-            predictions[1] = fy_ * distortion * yp;
+            predictions[0] = fx_ * distortion * xp + cx_;
+            predictions[1] = fy_ * distortion * yp + cy_;
             return predictions;
+        };
+
+        void setIntrinsic(Vec6 &out_intrinsic)
+        {
+            fx_ = out_intrinsic[0];
+            fy_ = out_intrinsic[1];
+            cx_ = out_intrinsic[2];
+            cy_ = out_intrinsic[3];
+            k1_ = out_intrinsic[4];
+            k2_ = out_intrinsic[5];
         }
 
-        // coordinate transform: world, camera, pixel
         Vec3 world2camera(const Vec3 &p_w, const SE3 &T_c_w);
 
         Vec3 camera2world(const Vec3 &p_c, const SE3 &T_c_w);

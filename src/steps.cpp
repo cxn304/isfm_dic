@@ -2,7 +2,9 @@
 
 namespace ISfM
 {
-    Steps::Steps(Initializer::Returns &returns, ImageLoader &Cimage_loader) : image_loader_(Cimage_loader)
+    Steps::Steps(const Initializer::Returns &returns,
+     const ImageLoader &Cimage_loader, Camera::Ptr &camera_one) : 
+     image_loader_(Cimage_loader),camera_one_(camera_one)
     {
         intrinsic_ << returns.K_.at<double>(0, 0), returns.K_.at<double>(1, 1),
             returns.K_.at<double>(0, 2), returns.K_.at<double>(1, 2), 0.0, 0.0;
@@ -10,6 +12,7 @@ namespace ISfM
         frames_ = returns.frames_;
         map_ = returns.map_;
         matchesMap_ = returns.matchesMap_;
+        camera_one_->setIntrinsic(intrinsic_);
     };
     // 在增加某一帧时,根据目前的状况选择不同的处理函数
     bool Steps::AddFrame(Frame::Ptr frame)
@@ -23,7 +26,6 @@ namespace ISfM
             Track(); // 在TRACKING_GOOD和TRACKING_BAD的时候都执行Track函数
             break;
         case ConstructionStatus::LOST:
-            Reset(); // 如果前端跟丢了,就运行Reset()函数,但是这里Reset()函数其实是空的哈,跟丢了以后我们其实啥也不做
             break;
         }
         last_frame_ = current_frame_;
@@ -75,8 +77,6 @@ namespace ISfM
 
         // triangulate map points
         TriangulateNewPoints(last_frame_, current_frame_); // 三角化新特征点并加入到地图中去
-        // 因为添加了新的关键帧,所以在后端里面 运行 Backend::UpdateMap() 更新一下局部地图,启动一次局部地图的BA优化
-        UpdateMap();
 
         return true;
     }
@@ -171,11 +171,17 @@ namespace ISfM
         vertex_pose->setEstimate(current_frame_->Pose());
         optimizer.addVertex(vertex_pose);
         // K
-        Mat33 K = camera_one_->K(); // Camera类的成员函数K()
+        Mat33 K = Mat33::Zero();
+        K(0,0) = intrinsic_[0];
+        K(1,1) = intrinsic_[1];
+        K(2,2) = 1.0;
+        K(0,2) = intrinsic_[2];
+        K(1,2) = intrinsic_[3];
         // edges 边是地图点(3d世界坐标)在当前帧的投影位置(像素坐标)
         int index = 1;
         std::vector<EdgeProjectionPoseOnly *> edges;
         std::vector<Feature::Ptr> features; // features 存储的是相机的特征点
+        //!!!!在此之前要把last_frame的map_point和current_frame的mappoint联系起来
         for (size_t i = 0; i < current_frame_->features_img_.size(); ++i)
         {
             auto mp = current_frame_->features_img_[i]->map_point_.lock(); // weak_ptr是有lock()函数的
@@ -282,7 +288,7 @@ namespace ISfM
         g2o::SparseOptimizer optimizer; // 创建稀疏优化器
         optimizer.setAlgorithm(solver); // 打开调试输出
 
-        // 内参,只加进去一个
+        // 内参,只加进去一个, id一直是0
         VertexIntrinsics *vertex_intrinsics = new VertexIntrinsics();
         vertex_intrinsics->setId(0);                // 内参id始终是0
         vertex_intrinsics->setEstimate(intrinsic_); // 内参设定为step类内内参,这里假设相机都是同一个
@@ -436,5 +442,6 @@ namespace ISfM
             cv::Vec3d lms(v.second->estimate()(0), v.second->estimate()(1), v.second->estimate()(2));
             landmarks.at(v.first - 1)->SetPos(lms); // landmarks:unordered_map<unsigned long, MapPoint::Ptr>
         }
+        camera_one_->setIntrinsic(intrinsic_); // 优化完成后要更新相机内参
     };
 }
