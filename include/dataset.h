@@ -27,9 +27,7 @@ namespace ISfM
         Dataset() {}
         void establishDbo(const vector<string> &filenames);
         int DetectFeatures(const cv::Mat &image,vector<cv::KeyPoint> &keypoints,cv::Mat &descriptors);
-        const map<string, pair<vector<cv::KeyPoint>,
-                               cv::Mat>> &
-        getFeatures() const { return features_; } // image name and their kpts, des
+
         cv::Mat getDboScore() const { return dbo_score_; }
         void setDboScore(const cv::Mat &score) { dbo_score_ = score; }
         // void saveSimilarMatrix(DBoW3::Vocabulary &vocab,
@@ -52,7 +50,6 @@ namespace ISfM
         Eigen::MatrixXd similarityMatrix_;
         std::map<std::pair<int, int>, std::vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果
     private:
-        map<string, pair<vector<cv::KeyPoint>, cv::Mat>> features_;
         map<int,string> file_paths_;
         cv::Mat dbo_score_; 
     };

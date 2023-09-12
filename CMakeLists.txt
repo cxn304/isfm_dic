@@ -52,6 +52,12 @@ include_directories(${CSPARSE_INCLUDE_DIR})
 # set( DBoW3_INCLUDE_DIRS "/usr/local/include" )
 # set( DBoW3_LIBS "/usr/local/lib/libDBoW3.so" )
 
+# 查找PCL库
+# find_package(PCL 1.12 REQUIRED)
+# include_directories(${PCL_INCLUDE_DIRS})
+# link_directories(${PCL_LIBRARY_DIRS})
+# add_definitions(${PCL_DEFINITIONS})
+
 set(THIRD_PARTY_LIBS
         ${OpenCV_LIBS}
         ${Sophus_LIBRARIES}
@@ -63,6 +69,7 @@ set(THIRD_PARTY_LIBS
         # ${GFLAGS_LIBRARIES}
         pthread
         ${CSPARSE_LIBRARY}
+        # ${PCL_LIBRARIES}
         # ${DBoW3_LIBS}
         )#将需要的包,打包放到一个名称下,使得代码更简洁
 

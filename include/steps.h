@@ -2,6 +2,7 @@
 #ifndef STEPS_H
 #define STEPS_H
 
+#include <iostream>
 #include <opencv2/features2d.hpp>
 #include "common.h"
 #include "frame.h"
@@ -52,6 +53,8 @@ namespace ISfM
         
         void Optimize(Map::KeyframesType &keyframes,Map::LandmarksType &landmarks);
 
+        void count_feature_point(Map::LandmarksType &landmarks);
+
     private:
         /**
          * Track in normal mode
@@ -78,7 +81,7 @@ namespace ISfM
         bool InsertKeyframe();
 
         /**
-         * Find the corresponding features in right image of current_frame_
+         * Find the corresponding features in current_frame_ of last_frame_
          * @return num of features found
          */
         int FindFeaturesInSecond();
@@ -113,9 +116,6 @@ namespace ISfM
         Vec6 intrinsic_ = Vec6::Zero();
         Map::Ptr map_ = nullptr;
         vector<Frame::Ptr> frames_;                          // 所有的frame信息
-        Frame::Ptr frameone_ = nullptr;                      // 选定的一帧,这里暂时第一第二帧,记住要初始化pose
-        Frame::Ptr frametwo_ = nullptr;                      // 选定的另一帧,也传递到step里面
-        vector<vector<Feature::Ptr>> features_;              // 转换后的 Feature 对象,2维点,要传递到step里面的
         map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
         ImageLoader image_loader_;
 

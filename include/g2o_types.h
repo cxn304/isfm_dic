@@ -127,11 +127,41 @@ namespace ISfM
         Mat33 _K;
     };
 
+    /// 带有地图和位姿的二元边
+    class EdgeProjection
+        : public g2o::BaseBinaryEdge<2, Vec2, VertexPose, VertexXYZ>
+    {
+    public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+
+        /// 构造时传入相机内外参
+        EdgeProjection(const Mat33 &K) : _K(K)
+        {
+        }
+
+        virtual void computeError() override
+        {
+            const VertexPose *v0 = static_cast<VertexPose *>(_vertices[0]);
+            const VertexXYZ *v1 = static_cast<VertexXYZ *>(_vertices[1]);
+            SE3 T = v0->estimate();
+            Vec3 pos_pixel = _K * (T * v1->estimate());
+            pos_pixel /= pos_pixel[2];
+            _error = _measurement - pos_pixel.head<2>();
+        }
+
+        virtual bool read(std::istream &in) override { return true; }
+
+        virtual bool write(std::ostream &out) const override { return true; }
+
+    private:
+        Mat33 _K;
+    };
+
     // 自定义重投影误差边类,包括内参外参和3维点
     class EdgeReprojectionIntrisic : public g2o::BaseFixedSizedEdge<2,
                                                                     Vec2,
-                                                                    VertexPose, 
-                                                                    VertexXYZ, 
+                                                                    VertexPose,
+                                                                    VertexXYZ,
                                                                     VertexIntrinsics>
     {
     public:
@@ -165,7 +195,7 @@ namespace ISfM
             Vec2 pos_pixel_distorted = distortion * pos_camera_norm;
             Vec2 pos_pixel;
             pos_pixel[0] = fx * pos_pixel_distorted[0] + cx;
-            pos_pixel[0] = fy * pos_pixel_distorted[1] + cy;
+            pos_pixel[1] = fy * pos_pixel_distorted[1] + cy;
             _error = _measurement - pos_pixel;
         }
 

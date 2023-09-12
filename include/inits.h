@@ -8,6 +8,8 @@
 #include "dataset.h"
 #include "map.h"
 #include "feature.h"
+#include "triangulate.h"
+#include "camera.h"
 
 using namespace std;
 namespace ISfM
@@ -28,7 +30,6 @@ namespace ISfM
             cv::Mat K_;
             Map::Ptr map_ = nullptr;                             // 初始化时的map,要传递到step里面的
             vector<Frame::Ptr> frames_;                          // 初始化时就搞定了所有frame
-            vector<vector<Feature::Ptr>> features_;              // 转换后的 Feature 对象,2维点,要传递到step里面的
             map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
         };
         struct Statistics
@@ -69,24 +70,18 @@ namespace ISfM
         string GetFailReason();
         
     private:
-        // 使用自带参数寻找Homo矩阵,inlier_mask用于标记哪些点对被认为是内点
-        void FindHomography(const vector<Feature::Ptr> &points2D1,
-                            const vector<Feature::Ptr> &points2D2,
-                            cv::Mat &H,
-                            vector<bool> &inlier_mask,
-                            size_t &num_inliers);
+        // 计算feature数量
+        void coutFeaturePoint(const vector<Feature::Ptr> &feature2D1,
+                                         const vector<Feature::Ptr> &feature2D2);
         // 使用自带参数寻找Fundemental矩阵
         void FindFundanmental(const vector<Feature::Ptr> &points2D1,
                               const vector<Feature::Ptr> &points2D2,
                               cv::Mat &F,
                               vector<bool> &inlier_mask,
                               size_t &num_inliers);
-        // 恢复相机外参从Homography矩阵
-        bool RecoverPoseFromHomography(const cv::Mat &H,
-                                       const vector<Feature::Ptr> &points2D1,
-                                       const vector<Feature::Ptr> &points2D2,
-                                       const vector<bool> &inlier_mask_H);
-        //
+        // 三角化点,包括将三角化后的点加入map和各个frame中
+        void TriangulateInitPoints(Frame::Ptr &frame_one, Frame::Ptr &frame_two);
+
         bool RecoverPoseFromFundanmental(const cv::Mat &F,
                                          const vector<Feature::Ptr> &points2D1,
                                          const vector<Feature::Ptr> &points2D2,
@@ -103,11 +98,12 @@ namespace ISfM
         Statistics statistics_;
         Returns returns_;
         cv::Mat K_; // 传递到step里面的
+        vector<cv::Mat> K_vector_; // 多个内参的预选
         ImageLoader image_loader_;
         Dataset Cdate_;                                      // 传递一部分到step中
         Map::Ptr map_ = nullptr;                             // 初始化时的map,要传递到step里面的
-        vector<vector<Feature::Ptr>> features_;              // 转换后的 Feature 对象,2维点,要传递到step里面的
         map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
+        Camera::Ptr camera_one_;
     };
 }
 #endif

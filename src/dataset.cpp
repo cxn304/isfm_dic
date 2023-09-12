@@ -271,7 +271,7 @@ namespace ISfM
         for (int i = 0; i < file_paths_.size() - 1; ++i)
         {
             std::vector<cv::DMatch> matches;
-            ComputeMatches(descriptors_[i], descriptors_[i + 1], matches, 0.9);
+            ComputeMatches(descriptors_[i], descriptors_[i + 1], matches, 0.8);
             // 构建图像对
             std::pair<int, int> imagePair(i, i + 1);
             matchesMap_[imagePair] = matches;
