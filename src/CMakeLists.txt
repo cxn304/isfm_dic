@@ -14,6 +14,7 @@ add_library(ISfM SHARED
         map.cpp
         feature.cpp
         camera.cpp
+        # backend.cpp
         )
 # 创建库
 # add_library(ISfM SHARED ${SRC_FILES})

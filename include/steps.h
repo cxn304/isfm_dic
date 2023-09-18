@@ -32,7 +32,7 @@ namespace ISfM
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
         typedef std::shared_ptr<Steps> Ptr;
 
-        Steps(const Initializer::Returns &returns, const ImageLoader &Cimage_loader,Camera::Ptr &camera_one); // 构造函数
+        Steps(const Initializer::Returns &returns, const ImageLoader &Cimage_loader, Camera::Ptr &camera_one); // 构造函数
 
         /// 外部接口,添加一个帧(图像)并计算其定位结果
         bool AddFrame(Frame::Ptr frame);
@@ -40,22 +40,28 @@ namespace ISfM
         void SetMap(Map::Ptr map) { map_ = map; }
 
         ConstructionStatus GetStatus() const { return status_; }
-        
+
         void SetCameras(Camera::Ptr camera_one)
         {
-            camera_one_ = camera_one;
+            camera_ = camera_one;
         }
 
         std::vector<Frame::Ptr> getFrames() const
         {
             return frames_;
         }
-        
-        void Optimize(Map::KeyframesType &keyframes,Map::LandmarksType &landmarks);
+
+        void localBA(Map::KeyframesType &keyframes, Map::LandmarksType &landmarks);
 
         void count_feature_point(Map::LandmarksType &landmarks);
 
+        vector<double> average_reprojection_error_;
+
     private:
+        void setIntrinsic(const Vec6 &out_intrinsic)
+        {
+            intrinsic_ = out_intrinsic;
+        }
         /**
          * Track in normal mode
          * @return true if success
@@ -108,7 +114,7 @@ namespace ISfM
 
         Frame::Ptr current_frame_ = nullptr; // 当前帧, 这里也承载相机的职能算了
         Frame::Ptr last_frame_ = nullptr;    // 上一帧
-        Camera::Ptr camera_one_ = nullptr;  // 当前相机
+        Camera::Ptr camera_ = nullptr;       // 当前相机
 
         SE3 relative_motion_; // 当前帧与上一帧的相对运动,用于估计当前帧pose初值
 
@@ -118,13 +124,13 @@ namespace ISfM
         vector<Frame::Ptr> frames_;                          // 所有的frame信息
         map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
         ImageLoader image_loader_;
+        
 
         // params
         int num_features_ = 200;
         int num_features_tracking_ = 50;
         int num_features_tracking_bad_ = 20;
         int num_features_needed_for_keyframe_ = 80;
-
     };
 
 } // namespace myslam

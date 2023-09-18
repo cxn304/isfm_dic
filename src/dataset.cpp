@@ -226,22 +226,22 @@ namespace ISfM
                 cout << "can't open file" << feature_path << endl;
             }
             for (auto &fms : filenames_)
-        {
-            cv::FileNode kptsNode = fs[fms]["kpts"];
-            vector<cv::KeyPoint> kpts;
-            for (const auto &kptNode : kptsNode)
             {
-                cv::KeyPoint kpt;
-                kptNode >> kpt;
-                kpts.push_back(kpt);
+                cv::FileNode kptsNode = fs[fms]["kpts"];
+                vector<cv::KeyPoint> kpts;
+                for (const auto &kptNode : kptsNode)
+                {
+                    cv::KeyPoint kpt;
+                    kptNode >> kpt;
+                    kpts.push_back(kpt);
+                }
+                kpoints_.push_back(kpts); // 这里要修改,kpts是一个point2d类才行
+                cv::FileNode descriptorNode = fs[fms]["descriptor"];
+                cv::Mat descriptor;
+                descriptorNode >> descriptor;
+                descriptors_.push_back(descriptor);
             }
-            kpoints_.push_back(kpts); // 这里要修改,kpts是一个point2d类才行
-            cv::FileNode descriptorNode = fs[fms]["descriptor"];
-            cv::Mat descriptor;
-            descriptorNode >> descriptor;
-            descriptors_.push_back(descriptor);
-        }
-        fs.release();
+            fs.release();
         }
     }
     ///////////////////////////////建立好数据库后,再read//////////////////////////////////////////
@@ -271,7 +271,7 @@ namespace ISfM
         for (int i = 0; i < file_paths_.size() - 1; ++i)
         {
             std::vector<cv::DMatch> matches;
-            ComputeMatches(descriptors_[i], descriptors_[i + 1], matches, 0.8);
+            ComputeMatches(kpoints_[i], kpoints_[i + 1], descriptors_[i], descriptors_[i + 1], matches, 0.8);
             // 构建图像对
             std::pair<int, int> imagePair(i, i + 1);
             matchesMap_[imagePair] = matches;
@@ -307,11 +307,12 @@ namespace ISfM
         fs.release();
     };
 
-    void Dataset::ComputeMatches(const cv::Mat &desc1,
-                                 const cv::Mat &desc2,
-                                 std::vector<cv::DMatch> &matches,
+    void Dataset::ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
+                                 cv::Mat &desc1, cv::Mat &desc2,
+                                 std::vector<cv::DMatch> &RR_matches,
                                  const float distance_ratio)
     {
+        std::vector<cv::DMatch> matches;
         cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create("BruteForce");
         std::vector<std::vector<cv::DMatch>> initial_matches;
 
@@ -321,6 +322,28 @@ namespace ISfM
             if (m[0].distance < distance_ratio * m[1].distance)
             {
                 matches.push_back(m[0]);
+            }
+        }
+        std::vector<cv::KeyPoint> R_keypoint01, R_keypoint02;
+        std::vector<cv::Point2f> p01, p02;
+
+        for (const auto &match : matches)
+        {
+            R_keypoint01.push_back(kp01[match.queryIdx]);
+            R_keypoint02.push_back(kp02[match.trainIdx]);
+            p01.push_back(kp01[match.queryIdx].pt);
+            p02.push_back(kp02[match.trainIdx].pt);
+        }
+
+        cv::Mat Fundamental;
+        std::vector<uchar> RansacStatus;
+        Fundamental = cv::findFundamentalMat(p01, p02, cv::FM_RANSAC, 3.0, 0.99, RansacStatus);
+
+        for (unsigned i = 0; i < matches.size(); i++)
+        {
+            if (RansacStatus[i] != 0)
+            {
+                RR_matches.push_back(matches[i]);
             }
         }
     }
@@ -360,5 +383,6 @@ namespace ISfM
         }
 
         fs.release();
-    }
+    };
+
 }

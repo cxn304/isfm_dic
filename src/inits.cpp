@@ -10,10 +10,10 @@ namespace ISfM
     };
     Initializer::Initializer(const ImageLoader &image_loader, const Dataset &Cdate)
         : image_loader_(image_loader), Cdate_(Cdate)
-    {
-        K_ = (cv::Mat_<double>(3, 3) << 2900.0, 0, 791,
-              0, 2890.0, 656,
-              0, 0, 1);
+    { // 2900.0,2890.0,791,656
+        K_ = (cv::Mat_<double>(3, 3) << 2600.0, 0.0, 800.0,
+              0.0, 2690.0, 600.0,
+              0.0, 0.0, 1.0);
         // 建立所有的frame
         for (int i = 0; i < image_loader_.filenames_.size(); i++)
         {
@@ -138,6 +138,7 @@ namespace ISfM
                                  params_.rel_pose_essential_error, inlier);
 
         cv::recoverPose(E, points2D1, points2D2, K_, Rwto2, t2); // Rwto2也是从points2D1到points2D2的转换
+        t2 = t2 * 10.0; // 没有尺度信息，这里先给尺度大一些
 
         Rwto1 = cv::Mat::eye(3, 3, CV_64F);
         t1 = cv::Mat::zeros(3, 1, CV_64F);

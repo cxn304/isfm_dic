@@ -1,9 +1,6 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <iostream>
-// #include <pcl/io/ply_io.h>
-// #include <pcl/point_cloud.h>
-// #include <pcl/point_types.h>
 #include "common.h"
 #include "dataset.h"
 #include "inits.h"
@@ -67,10 +64,17 @@ int main(int argc, char **argv)
             {
                 Map::KeyframesType active_kfs = map_->GetActiveKeyFrames();
                 Map::LandmarksType active_landmarks = map_->GetActiveMapPoints();
-                steps->Optimize(active_kfs, active_landmarks);
+                steps->localBA(active_kfs, active_landmarks);
             }
         }
     }
+    for (const auto& num : steps->average_reprojection_error_) {
+        std::cout << num << " ";
+    }
+    std::cout << std::endl;
+
+    Map::LandmarksType landmarked = map_->GetAllMapPoints();
+    SavePLY("./test/point.ply",landmarked);
 
     cv::Mat pose_image(480, 640, CV_8UC3, cv::Scalar(255, 255, 255));
     for(int i = 0; i < Cimage_loader.filenames_.size(); ++i){
@@ -84,18 +88,3 @@ int main(int argc, char **argv)
     return 0;
 };
 
-
-
-// 差个空,输出pcl点云供查看
-    // typedef pcl::PointXYZ PointType;
-    // Map::LandmarksType landmarked = map_->GetAllMapPoints();
-    // pcl::PointCloud<PointType>::Ptr cloud(new pcl::PointCloud<PointType>);
-    // for (auto &landmark : landmarked){
-    //    cv::Vec3d pos = landmark.second->pos_;
-    //    PointType pclPoint;
-    //    pclPoint.x = pos[0];
-    //    pclPoint.y = pos[1];
-    //    pclPoint.z = pos[2];
-    //    cloud->points.push_back(pclPoint);
-    // }
-    // pcl::io::savePLYFile("./tmp/point_cloud.ply", *cloud, true); // 存储点云到 PCL 文件

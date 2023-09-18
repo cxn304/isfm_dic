@@ -18,7 +18,7 @@ namespace ISfM
 
     Vec2 Camera::camera2pixel(const Vec3 &p_c, double k1, double k2)
     {
-        Vec2 predictions = projectWithDistortion(p_c(0) / p_c(2), p_c(1) / p_c(2));
+        Vec2 predictions = projectWithDistortion(p_c(0,0) / p_c(2,0), p_c(1,0) / p_c(2,0));
         return predictions;
     }
 

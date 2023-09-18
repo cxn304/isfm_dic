@@ -4,14 +4,14 @@
 namespace ISfM
 {
     Steps::Steps(const Initializer::Returns &returns,
-                 const ImageLoader &Cimage_loader, Camera::Ptr &camera_one) : image_loader_(Cimage_loader), camera_one_(camera_one)
+                 const ImageLoader &Cimage_loader, Camera::Ptr &camera_one) : image_loader_(Cimage_loader), camera_(camera_one)
     {
         intrinsic_ << returns.K_.at<double>(0, 0), returns.K_.at<double>(1, 1),
             returns.K_.at<double>(0, 2), returns.K_.at<double>(1, 2), 0.0, 0.0;
         frames_ = returns.frames_;
         map_ = returns.map_;
         matchesMap_ = returns.matchesMap_;
-        camera_one_->setIntrinsic(intrinsic_);
+        camera_->setIntrinsic(intrinsic_);
         last_frame_ = frames_[1];
         auto tmp_points = map_->GetAllMapPoints();
         count_feature_point(tmp_points);
@@ -21,15 +21,8 @@ namespace ISfM
     {
         current_frame_ = frame;
         // Track()是Frontend的成员函数,status_是Frontend的数据,可以直接使用
-        switch (status_)
-        {
-        case ConstructionStatus::TRACKING_GOOD:
-        case ConstructionStatus::TRACKING_BAD:
-            Track(); // 在TRACKING_GOOD和TRACKING_BAD的时候都执行Track函数
-            break;
-        case ConstructionStatus::LOST:
-            break;
-        }
+        Track(); // 在TRACKING_GOOD和TRACKING_BAD的时候都执行Track函数
+
         last_frame_ = current_frame_;
         return true;
     }
@@ -42,23 +35,8 @@ namespace ISfM
         {
             current_frame_->SetPose(relative_motion_ * last_frame_->Pose()); // 用匀速模型给current_frame_当前帧的位姿设置一个初值
         }
+        int num_track_last = FindFeaturesInSecond();
         tracking_inliers_ = EstimateCurrentPose(); // 接下来根据跟踪到的内点的匹配数目,可以分类进行后续操作,优化当前帧的位置
-
-        if (tracking_inliers_ > num_features_tracking_)
-        {
-            // tracking good
-            status_ = ConstructionStatus::TRACKING_GOOD;
-        }
-        else if (tracking_inliers_ > num_features_tracking_bad_)
-        {
-            // tracking bad
-            status_ = ConstructionStatus::TRACKING_BAD;
-        }
-        else
-        {
-            // lost
-            status_ = ConstructionStatus::LOST;
-        }
 
         InsertKeyframe();                                                          // 在此函数里面判断当前要不要插入关键帧
         relative_motion_ = current_frame_->Pose() * last_frame_->Pose().inverse(); // 更新当前帧和上一帧的位置差,也就是ΔT,变量名是relative_motion_
@@ -72,14 +50,15 @@ namespace ISfM
         current_frame_->SetKeyFrame();
         map_->InsertKeyFrame(current_frame_);
 
-        std::cout << "Set frame " << current_frame_->id_ << " as keyframe "
+        std::cout << " Set frame " << current_frame_->id_ << " as keyframe "
                   << current_frame_->keyframe_id_ << std::endl; // frame有自身的id,他作为keyframe也会有自己的id
 
-        // SetObservationsForKeyFrame(); // 添加关键帧的路标点
+        SetObservationsForKeyFrame(); // 添加关键帧的路标点
 
         // triangulate map points
         TriangulateNewPoints(last_frame_, current_frame_); // 三角化新特征点并加入到地图中去
-
+        auto tmp_points = map_->GetAllMapPoints();
+        count_feature_point(tmp_points); // 这里第一次加入新帧观测数量有问题
         return true;
     }
 
@@ -96,32 +75,32 @@ namespace ISfM
 
     // 当一个新的关键帧到来后,我们势必需要补充一系列新的特征点,
     // 此时则需要像建立初始地图一样,对这些新加入的特征点进行三角化,求其3D位置,三角化要考虑去畸变,之后进行
-    int Steps::TriangulateNewPoints(Frame::Ptr &frame_one, Frame::Ptr &frame_two)
+    int Steps::TriangulateNewPoints(Frame::Ptr &frame_last, Frame::Ptr &frame_current)
     {
-        std::vector<SE3> poses{frame_one->pose_, frame_two->pose_};
-        SE3 current_pose_Twc_one = frame_one->Pose().inverse(); // camera to world,frame里的是world to camera
-        SE3 current_pose_Twc_two = frame_two->Pose().inverse();
+        std::vector<SE3> poses{frame_last->pose_, frame_current->pose_};
+        SE3 current_pose_Twc_last = frame_last->Pose().inverse(); // camera to world,frame里的是world to camera
+        SE3 current_pose_Twc_current = frame_current->Pose().inverse();
         int cnt_triangulated_pts = 0; // 三角化成功的点的数目
-        vector<cv::DMatch> &this_match = matchesMap_[make_pair(frame_one->id_, frame_two->id_)];
+        vector<cv::DMatch> &this_match = matchesMap_[make_pair(frame_last->id_, frame_current->id_)];
         for (size_t i = 0; i < this_match.size(); ++i)
         {
             // 取出对应的特征点索引
             int queryIdx = this_match[i].queryIdx;
             int trainIdx = this_match[i].trainIdx;
             // 根据索引获取特征点
-            std::shared_ptr<Feature> queryFeature = frame_one->features_img_[queryIdx];
-            std::shared_ptr<Feature> trainFeature = frame_two->features_img_[trainIdx];
+            std::shared_ptr<Feature> queryFeature = frame_last->features_img_[queryIdx];
+            std::shared_ptr<Feature> trainFeature = frame_current->features_img_[trainIdx];
 
             // 遍历两个frame match的所有点
             if (queryFeature->map_point_.expired() &&
-                queryFeature->map_point_.expired()) // expired()为true的话表示关联的std::shared_ptr已经被销毁
+                trainFeature->map_point_.expired()) // expired()为true的话表示关联的std::shared_ptr已经被销毁
             {
                 // 左图的特征点未关联地图点且存在右图匹配点,尝试三角化
                 std::vector<Vec3> points{
-                    camera_one_->pixel2camera(
+                    camera_->pixel2camera(
                         Vec2(queryFeature->position_.pt.x,
                              queryFeature->position_.pt.y)),
-                    camera_one_->pixel2camera(
+                    camera_->pixel2camera(
                         Vec2(trainFeature->position_.pt.x,
                              trainFeature->position_.pt.y))};
                 Vec3 pworld = Vec3::Zero();
@@ -129,10 +108,7 @@ namespace ISfM
                 if (triangulation(poses, points, pworld) && pworld[2] > 0)
                 {
                     auto new_map_point = MapPoint::CreateNewMappoint();
-                    // 注意这里与初始化地图不同 triangulation计算出来的点pworld,
-                    // 实际上是相机坐标系下的点,所以需要乘以一个TWC
-                    // 但是初始化地图时,一般以第一幅图片为世界坐标系
-                    pworld = current_pose_Twc_one * pworld;
+                    // 这里的poses是Tcw 形式Pose, world to camera, 所以pworld应该是在世界坐标系下
                     cv::Vec3d cvVector;
                     cvVector[0] = pworld(0);
                     cvVector[1] = pworld(1);
@@ -161,6 +137,7 @@ namespace ISfM
         unsigned c_id = current_frame_->id_;
         unsigned js = 0;
         vector<cv::DMatch> &this_match = matchesMap_[make_pair(l_id, c_id)];
+        std::vector<cv::Point2f> kps_last, kps_current;
         for (auto &mt : this_match)
         {
             // 取出对应的特征点索引
@@ -169,17 +146,21 @@ namespace ISfM
             // 根据索引获取特征点
             std::shared_ptr<Feature> queryFeature = last_frame_->features_img_[queryIdx];
             // 如果上一帧中的该特征点不是空指针,则将该帧中的这个特征点的mappoint赋值
-            if (queryFeature->map_point_.lock() != nullptr)
+            if (queryFeature->map_point_.lock())
             {
+                auto mp = queryFeature->map_point_.lock();
+                Vec3 poss_;
+                cv::cv2eigen(mp->pos_, poss_);
+                auto px = camera_->world2pixel(poss_, current_frame_->Pose()); //
                 std::shared_ptr<Feature> trainFeature = current_frame_->features_img_[trainIdx];
                 trainFeature->map_point_ = queryFeature->map_point_;
-                queryFeature->map_point_.lock()->AddObservation(trainFeature);
+                // queryFeature->map_point_.lock()->AddObservation(trainFeature);
                 js++;
+                kps_last.push_back(queryFeature->position_.pt);
+                kps_current.push_back(cv::Point2f(px[0], px[1]));
             }
         }
-        auto tmp_points = map_->GetAllMapPoints();
-        count_feature_point(tmp_points);
-        return js;
+        return js; // 第一次新增的AddObservation数量也是对的上的
     }
 
     // ceres优化单张图片的代码,因为要求出这张图片的初始位姿
@@ -212,7 +193,6 @@ namespace ISfM
         int index = 1;
         std::vector<EdgeProjectionPoseOnly *> edges;
         std::vector<Feature::Ptr> features; // features 存储的是相机的特征点
-        FindFeaturesInSecond();
         //!!!!在此之前要把last_frame的map_point和current_frame的mappoint联系起来
         // 这一段代码是将新frame中所有与之前图像有共同观测点的feature找出来
         for (auto &c_feature : current_frame_->features_img_)
@@ -278,20 +258,18 @@ namespace ISfM
             }
         }
 
-        std::cout << "****************************Outlier/Inlier in pose estimating: "
-                  << "/"
-                  << features.size() - cnt_outlier << std::endl;
+        std::cout << "Outlier/Inlier in pose estimating: " << cnt_outlier << "/"
+                  << features.size() - cnt_outlier << endl;
         // Set pose and outlier
         current_frame_->SetPose(vertex_pose->estimate()); // 保存优化后的位姿
 
         std::cout << "Current Pose = \n"
                   << current_frame_->Pose().matrix() << std::endl;
-        // 清除异常点 但是只在feature中清除了
-        // mappoint中仍然存在,仍然有使用的可能
+        // 清除异常点,这里的feature是新帧中的feature
         for (auto &feat : features)
         {
             if (feat->is_outlier_)
-            {
+            {                              //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 feat->map_point_.reset();  //.reset()方法的作用是将该弱引用指针设置为空nullptr,但不影响指向该对象的强引用数量,只会使得其弱引用数量减少
                 feat->is_outlier_ = false; // maybe we can still use it in future
             }
@@ -299,21 +277,19 @@ namespace ISfM
         return features.size() - cnt_outlier;
     }
 
+#define SFM_MODE
 #ifdef SFM_MODE
-    void Steps::Optimize(Map::KeyframesType &keyframes,
-                         Map::LandmarksType &landmarks)
+    void Steps::localBA(Map::KeyframesType &keyframes,
+                        Map::LandmarksType &landmarks)
     {
-        // 主优化函数,在后端优化里面,局部地图中的所有关键帧位姿和地图点都是顶点,相机内参也是顶点
-        // 边是自定义边,在 g2o_types.h
+        // 局部地图中的所有关键帧位姿和地图点都是顶点,相机内参也是顶点,边是自定义边,在 g2o_types.h
         typedef g2o::BlockSolver<g2o::BlockSolverTraits<Eigen::Dynamic, Eigen::Dynamic>> BlockSolverType;
-        // 根据图优化类型，定义线性方程求解器,根据g2o的调用规则，这里需要使用智能指针
-        std::unique_ptr<BlockSolverType::LinearSolverType> linearSolver(
-            new g2o::LinearSolverDense<BlockSolverType::PoseMatrixType>());
-        // 根据线性方程求解器定义矩阵块求解器
-        std::unique_ptr<BlockSolverType> matSolver(new BlockSolverType(std::move(linearSolver)));
+        typedef g2o::LinearSolverDense<BlockSolverType::PoseMatrixType>
+            LinearSolverType;
         // 选取优化过程中使用的梯度下降算法,类似于ceres里面的loss function的那个函数的选择
-        g2o::OptimizationAlgorithmLevenberg *solver =
-            new g2o::OptimizationAlgorithmLevenberg(std::move(matSolver));
+        auto solver = new g2o::OptimizationAlgorithmLevenberg(
+            std::make_unique<BlockSolverType>(
+                std::make_unique<LinearSolverType>()));
         g2o::SparseOptimizer optimizer; // 创建稀疏优化器
         optimizer.setVerbose(true);     // 开启优化信息输出
         optimizer.setAlgorithm(solver); // 打开调试输出
@@ -363,9 +339,7 @@ namespace ISfM
                 if (obs.lock() == nullptr)
                     continue; // 如果对象销毁则继续
                 auto feat = obs.lock();
-                // weak_ptr提供了expired()与lock()成员函数,前者用于判断weak_ptr指向的对象是否已被销毁,
-                // 后者返回其所指对象的shared_ptr智能指针(对象销毁时返回”空”shared_ptr)
-                if (feat->is_outlier_ || feat->frame_.lock() == nullptr)
+                if (feat->is_outlier_ || feat->frame_.lock() == nullptr || !feat->frame_.lock()->is_keyframe_)
                     continue;
 
                 auto frame = feat->frame_.lock(); // 得到该feature所在的frame
@@ -395,8 +369,6 @@ namespace ISfM
                 edge->setInformation(Mat22::Identity()); // e转置*信息矩阵*e,所以由此可以看出误差向量为n×1,则信息矩阵为n×n
                 auto rk = new g2o::RobustKernelHuber();  // 定义robust kernel函数
                 rk->setDelta(chi2_th);                   // 设置阈值
-                // 设置核函数 之所以要设置鲁棒核函数是为了平衡误差,不让二范数的误差增加的过快.
-                // 鲁棒核函数里要自己设置delta值,
                 // 这个delta值是,当误差的绝对值小于等于它的时候,误差函数不变.否则误差函数根据相应的鲁棒核函数发生变化.
                 edge->setRobustKernel(rk);
                 edges_and_features.insert({edge, feat});
@@ -421,19 +393,13 @@ namespace ISfM
             for (auto &ef : edges_and_features)
             {
                 if (ef.first->chi2() > chi2_th)
-                {
                     cnt_outlier++;
-                }
                 else
-                {
                     cnt_inlier++;
-                }
             }
             double inlier_ratio = cnt_inlier / double(cnt_inlier + cnt_outlier);
             if (inlier_ratio > 0.5)
-            {
                 break;
-            }
             else
             {
                 chi2_th *= 2;
@@ -450,14 +416,21 @@ namespace ISfM
                 ef.second->map_point_.lock()->RemoveObservation(ef.second);
             }
             else
-            {
                 ef.second->is_outlier_ = false;
-            }
         }
 
         std::cout << "Outlier/Inlier in optimization: " << cnt_outlier << "/"
                   << cnt_inlier << std::endl;
-
+        double total_reprojection_error = 0.0;
+        int num_reprojections = 0;
+        for (auto &ef : edges_and_features)
+        {
+            double reprojection_error = ef.first->chi2();
+            total_reprojection_error += reprojection_error;
+            num_reprojections++;
+        }
+        double average_reprojection_error = total_reprojection_error / num_reprojections;
+        average_reprojection_error_.push_back(average_reprojection_error);
         // Set pose and lanrmark position,这样也就把后端优化的结果反馈给了前端
         for (auto &v : vertices)
         {
@@ -467,14 +440,15 @@ namespace ISfM
         for (auto &v : vertices_landmarks)
         {
             cv::Vec3d lms(v.second->estimate()(0), v.second->estimate()(1), v.second->estimate()(2));
-            landmarks.at(v.first - 1)->SetPos(lms); // landmarks:unordered_map<unsigned long, MapPoint::Ptr>
+            landmarks.at(v.first)->SetPos(lms); // landmarks:unordered_map<unsigned long, MapPoint::Ptr>
         }
-        camera_one_->setIntrinsic(intrinsic_); // 优化完成后要更新相机内参
+        setIntrinsic(vertex_intrinsics->estimate());
+        camera_->setIntrinsic(intrinsic_); // 优化完成后要更新相机内参
     };
 
 #else
-    void Steps::Optimize(Map::KeyframesType &keyframes,
-                         Map::LandmarksType &landmarks)
+    void Steps::localBA(Map::KeyframesType &keyframes,
+                        Map::LandmarksType &landmarks)
     {
         typedef g2o::BlockSolver_6_3 BlockSolverType; // pose is 6 dof, landmarks is 3 dof
         typedef g2o::LinearSolverDense<BlockSolverType::PoseMatrixType>
@@ -485,7 +459,6 @@ namespace ISfM
         g2o::SparseOptimizer optimizer;
         // optimizer.setVerbose(true);     // 开启优化信息输出
         optimizer.setAlgorithm(solver); // 打开调试输出
-
         // pose 顶点，使用Keyframe id
         std::map<unsigned long, VertexPose *> vertices;
         unsigned long max_kf_id = 0;
@@ -505,7 +478,7 @@ namespace ISfM
         }
         // 路标顶点，使用路标id索引
         std::map<unsigned long, VertexXYZ *> vertices_landmarks;
-        // K 和左右外参
+        // K
         Mat33 K = Mat33::Zero();
         K(0, 0) = intrinsic_[0];
         K(1, 1) = intrinsic_[1];
@@ -527,7 +500,7 @@ namespace ISfM
                 if (obs.lock() == nullptr)
                     continue; // 如果对象销毁则继续
                 auto feat = obs.lock();
-                if (feat->is_outlier_ || feat->frame_.lock() == nullptr)
+                if (feat->is_outlier_ || feat->frame_.lock() == nullptr || !feat->frame_.lock()->is_keyframe_)
                     continue;
 
                 auto frame = feat->frame_.lock(); // 得到该feature所在的frame
@@ -578,19 +551,13 @@ namespace ISfM
             for (auto &ef : edges_and_features)
             {
                 if (ef.first->chi2() > chi2_th)
-                {
                     cnt_outlier++;
-                }
                 else
-                {
                     cnt_inlier++;
-                }
             }
             double inlier_ratio = cnt_inlier / double(cnt_inlier + cnt_outlier);
             if (inlier_ratio > 0.5)
-            {
                 break;
-            }
             else
             {
                 chi2_th *= 2;
@@ -598,31 +565,33 @@ namespace ISfM
             }
         }
 
-        int cout_f = 0;
         for (auto &ef : edges_and_features)
         { // 根据新的阈值，调整哪些是外点 ，并移除
             if (ef.first->chi2() > chi2_th)
             {
                 ef.second->is_outlier_ = true;
-                // remove the observation
-                if (ef.second->map_point_.expired())
-                {
-                    cout_f++;
-                    cout << cout_f << endl;
-                    continue;
-                }
-
+                // remove the observation,这里只remove一个feature
                 ef.second->map_point_.lock()->RemoveObservation(ef.second);
             }
             else
-            {
                 ef.second->is_outlier_ = false;
-            }
         }
 
         cout << "****************************Outlier/Inlier in optimization: " << cnt_outlier << "/"
              << cnt_inlier << endl;
 
+        // Calculate and print average reprojection error
+        double total_reprojection_error = 0.0;
+        int num_reprojections = 0;
+        for (auto &ef : edges_and_features)
+        {
+            double reprojection_error = ef.first->chi2();
+            total_reprojection_error += reprojection_error;
+            num_reprojections++;
+        }
+        double average_reprojection_error = total_reprojection_error / num_reprojections;
+        average_reprojection_error_.push_back(average_reprojection_error);
+        
         // Set pose and lanrmark position，这样也就把后端优化的结果反馈给了前端
         for (auto &v : vertices)
         {
@@ -638,13 +607,15 @@ namespace ISfM
     void Steps::count_feature_point(Map::LandmarksType &landmarks)
     {
         int mp_f_num = 0;
+        int obs1 = 0;
         for (auto &mp : landmarks)
         {
             mp_f_num += mp.second->observed_times_;
             if (mp.second->observations_.size() == 1)
-                cout << "observed time is 1!" << endl;
+                obs1++;
         }
-        cout << "all map number is: " << landmarks.size() << " all observed feature:" << mp_f_num << endl;
+        cout << "observed time is 1: " << obs1 << endl;
+        cout << "all map number is: " << landmarks.size() << ", all observed feature:" << mp_f_num << endl;
         for (auto &framed : frames_)
         {
             if (framed->is_keyframe_)
@@ -659,5 +630,7 @@ namespace ISfM
                 cout << "frame" << framed->id_ << " mappoint is: " << f0n << endl;
             }
         }
+        std::cout << "intrinsic: " << std::endl
+                  << intrinsic_ << std::endl;
     }
 }

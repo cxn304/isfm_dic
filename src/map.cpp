@@ -47,18 +47,14 @@ namespace ISfM
     // 删除最旧的关键帧
     void Map::RemoveOldKeyframe()
     {
-        if (current_frame_ == nullptr)
-            return;
-
+        if (current_frame_ == nullptr) return;
         // 寻找与当前帧最近与最远的两个关键帧
         double max_dis = 0, min_dis = 9999;
         double max_kf_id = 0, min_kf_id = 0;
         auto Twc = current_frame_->Pose().inverse(); // 当前帧的位姿的逆
         for (auto &kf : active_keyframes_)
         {
-            if (kf.second == current_frame_)
-                continue;
-
+            if (kf.second == current_frame_) continue;
             auto dis = (kf.second->Pose() * Twc).log().norm(); // 计算当前帧与其他关键帧的相对位姿差
             if (dis > max_dis)
             {
@@ -74,29 +70,28 @@ namespace ISfM
 
         const double min_dis_th = 0.2; // 最近阈值
         Frame::Ptr frame_to_remove = nullptr;
-        if (min_dis < min_dis_th)
+        if (min_dis < min_dis_th) // 如果存在很近的帧,优先删除最近的关键帧
         {
-            // 如果存在很近的帧,优先删除最近的关键帧
             frame_to_remove = keyframes_.at(min_kf_id);
         }
-        else
+        else // 删除最远的关键帧
         {
-            // 删除最远的关键帧
             frame_to_remove = keyframes_.at(max_kf_id);
         }
 
-        cout << "remove keyframe " << frame_to_remove->keyframe_id_;
+        cout << " remove keyframe " << frame_to_remove->keyframe_id_;
 
-        // 删除关键帧及其对应的地图点观测
+        // 删除关键帧,先不删除地图点观测
         active_keyframes_.erase(frame_to_remove->keyframe_id_);
-        for (auto feat : frame_to_remove->features_img_)
-        {
-            auto mp = feat->map_point_.lock();
-            if (mp)
-            {
-                mp->RemoveObservation(feat);
-            }
-        }
+        frame_to_remove->is_keyframe_ = false;
+        // for (auto feat : frame_to_remove->features_img_)
+        // {
+        //     auto mp = feat->map_point_.lock();
+        //     if (mp)
+        //     {
+        //         mp->RemoveObservation(feat);
+        //     }
+        // }
 
         CleanMap(); // 清理地图
     }
@@ -117,6 +112,6 @@ namespace ISfM
                 ++iter;
             }
         }
-        cout << "Removed " << cnt_landmark_removed << " active landmarks";
+        cout << " Removed " << cnt_landmark_removed << " active landmarks";
     }
 }

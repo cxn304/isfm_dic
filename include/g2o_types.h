@@ -134,7 +134,7 @@ namespace ISfM
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-        /// 构造时传入相机内外参
+        /// 构造时传入相机内参,看看这个能不能优化下去
         EdgeProjection(const Mat33 &K) : _K(K)
         {
         }
@@ -148,7 +148,27 @@ namespace ISfM
             pos_pixel /= pos_pixel[2];
             _error = _measurement - pos_pixel.head<2>();
         }
+        virtual void linearizeOplus() override
+        {
+            const VertexPose *v0 = static_cast<VertexPose *>(_vertices[0]);
+            const VertexXYZ *v1 = static_cast<VertexXYZ *>(_vertices[1]);
+            SE3 T = v0->estimate();
+            Vec3 pw = v1->estimate();
+            Vec3 pos_cam = T * pw;
+            double fx = _K(0, 0);
+            double fy = _K(1, 1);
+            double X = pos_cam[0];
+            double Y = pos_cam[1];
+            double Z = pos_cam[2];
+            double Zinv = 1.0 / (Z + 1e-18);
+            double Zinv2 = Zinv * Zinv;
+            _jacobianOplusXi << -fx * Zinv, 0, fx * X * Zinv2, fx * X * Y * Zinv2,
+                -fx - fx * X * X * Zinv2, fx * Y * Zinv, 0, -fy * Zinv,
+                fy * Y * Zinv2, fy + fy * Y * Y * Zinv2, -fy * X * Y * Zinv2,
+                -fy * X * Zinv;
 
+            _jacobianOplusXj = _jacobianOplusXi.block<2, 3>(0, 0) * T.rotationMatrix();
+        }
         virtual bool read(std::istream &in) override { return true; }
 
         virtual bool write(std::ostream &out) const override { return true; }

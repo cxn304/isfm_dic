@@ -38,7 +38,7 @@
 			},
 			"command": "make",
 			"args": [
-				"-j4",
+				"-j6",
 			], //根据机器cpu核心数量自行调整
 			"options": {
 				"cwd": "${workspaceFolder}/build"
