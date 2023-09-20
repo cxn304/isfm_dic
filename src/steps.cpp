@@ -77,6 +77,7 @@ namespace ISfM
     // 此时则需要像建立初始地图一样,对这些新加入的特征点进行三角化,求其3D位置,三角化要考虑去畸变,之后进行
     int Steps::TriangulateNewPoints(Frame::Ptr &frame_last, Frame::Ptr &frame_current)
     {
+        cv::Mat image = cv::imread(frame_last->img_name, cv::IMREAD_COLOR);
         std::vector<SE3> poses{frame_last->pose_, frame_current->pose_};
         SE3 current_pose_Twc_last = frame_last->Pose().inverse(); // camera to world,frame里的是world to camera
         SE3 current_pose_Twc_current = frame_current->Pose().inverse();
@@ -109,6 +110,10 @@ namespace ISfM
                 {
                     auto new_map_point = MapPoint::CreateNewMappoint();
                     // 这里的poses是Tcw 形式Pose, world to camera, 所以pworld应该是在世界坐标系下
+                    uchar* pixel = image.ptr<uchar>(queryFeature->position_.pt.y, queryFeature->position_.pt.x);
+                    Eigen::Matrix<uchar, 3, 1> color;
+                    color << pixel[2], pixel[1], pixel[0];
+                    new_map_point->SetColor(color);
                     cv::Vec3d cvVector;
                     cvVector[0] = pworld(0);
                     cvVector[1] = pworld(1);
@@ -277,7 +282,7 @@ namespace ISfM
         return features.size() - cnt_outlier;
     }
 
-#define SFM_MODE
+//#define SFM_MODE // 优化内参的
 #ifdef SFM_MODE
     void Steps::localBA(Map::KeyframesType &keyframes,
                         Map::LandmarksType &landmarks)
@@ -446,7 +451,7 @@ namespace ISfM
         camera_->setIntrinsic(intrinsic_); // 优化完成后要更新相机内参
     };
 
-#else
+#else // 不优化内参的
     void Steps::localBA(Map::KeyframesType &keyframes,
                         Map::LandmarksType &landmarks)
     {
@@ -604,6 +609,173 @@ namespace ISfM
         }
     }
 #endif
+
+    void Steps::gloabalBA(Map::LandmarksType &landmarks)
+    {
+        // 所有位姿和地图点都是顶点,相机内参也是顶点,边是自定义边,在 g2o_types.h
+        typedef g2o::BlockSolver<g2o::BlockSolverTraits<Eigen::Dynamic, Eigen::Dynamic>> BlockSolverType;
+        typedef g2o::LinearSolverDense<BlockSolverType::PoseMatrixType>
+            LinearSolverType;
+        auto solver = new g2o::OptimizationAlgorithmLevenberg(
+            std::make_unique<BlockSolverType>(
+                std::make_unique<LinearSolverType>()));
+        g2o::SparseOptimizer optimizer; // 创建稀疏优化器
+        optimizer.setVerbose(true);     // 开启优化信息输出
+        optimizer.setAlgorithm(solver); // 打开调试输出
+
+        // 内参,只加进去一个, id一直是0
+        VertexIntrinsics *vertex_intrinsics = new VertexIntrinsics();
+        vertex_intrinsics->setId(0);                // 内参id始终是0
+        vertex_intrinsics->setEstimate(intrinsic_); // 内参设定为step类内内参,这里假设相机都是同一个
+        // 添加内参节点
+        optimizer.addVertex(vertex_intrinsics);
+        // pose 顶点,使用所有frame id
+        std::map<unsigned long, VertexPose *> vertices;
+        unsigned long max_ff_id = 1;
+
+        for (auto &frame : frames_)
+        { // 遍历关键帧,确定第一个顶点,注意!!!!!这里由于有了内参设置id=0, 所以keyframe_id_统一加1
+            auto ff = frame;
+            auto ff_id = ff->id_ + 1;
+            VertexPose *vertex_pose = new VertexPose(); // camera vertex_pose
+            vertex_pose->setId(ff_id);
+            vertex_pose->setEstimate(ff->Pose()); // keyframe的pose(SE3)是待估计的第一个对象
+            optimizer.addVertex(vertex_pose);
+            if (ff_id > max_ff_id)
+            {
+                max_ff_id = ff_id;
+            }
+
+            vertices.insert({ff_id, vertex_pose}); // 插入自定义map类型的vertices
+        }
+
+        // 路标顶点,使用路标id索引
+        std::map<unsigned long, VertexXYZ *> vertices_landmarks;
+
+        // edges
+        int index = 1;
+        double chi2_th = 5.991; // robust kernel 阈值
+        std::map<EdgeReprojectionIntrisic *, Feature::Ptr> edges_and_features;
+        // std::pair主要的两个成员变量是first和second
+        for (auto &landmark : landmarks)
+        { // 遍历所有活动路标点
+            if (landmark.second->is_outlier_)
+                continue;                                     // 外点不优化,first是id,second包括该点的位置,观测的若干相机的位姿,该点在各相机中的像素坐标
+            unsigned long landmark_id = landmark.second->id_; // mappoint的id
+            auto observations = landmark.second->GetObs();    // 得到所有观测到这个路标点的feature,是features
+            for (auto &obs : observations)
+            { // 遍历所有观测到这个路标点的feature,得到第二个顶点,形成对应的点边关系
+                if (obs.lock() == nullptr)
+                    continue; // 如果对象销毁则继续
+                auto feat = obs.lock();
+                if (feat->is_outlier_ || feat->frame_.lock() == nullptr)
+                    continue;
+
+                auto frame = feat->frame_.lock(); // 得到该feature所在的frame
+                EdgeReprojectionIntrisic *edge = nullptr;
+                edge = new EdgeReprojectionIntrisic();
+
+                // 如果landmark还没有被加入优化,则新加一个顶点
+                // 意思是无论mappoint被观测到几次,只与其中一个形成关系
+                if (vertices_landmarks.find(landmark_id) ==
+                    vertices_landmarks.end())
+                {
+                    VertexXYZ *v = new VertexXYZ;
+                    Eigen::Matrix<double, 3, 1> pose_tmp;
+                    pose_tmp << landmark.second->Pos()[0], landmark.second->Pos()[1], landmark.second->Pos()[2];
+                    v->setEstimate(pose_tmp); // Position in world,是作为estimate的第二个对象
+                    v->setId(landmark_id + max_ff_id);
+                    v->setMarginalized(true); // 边缘化
+                    vertices_landmarks.insert({landmark_id, v});
+                    optimizer.addVertex(v); // 增加point顶点
+                }
+
+                edge->setId(index);
+                edge->setVertex(0, vertices.at(frame->keyframe_id_ + 1)); // pose!!!!!!!!id!!!!!!!!!
+                edge->setVertex(1, vertices_landmarks.at(landmark_id));   // landmark
+                edge->setVertex(2, vertex_intrinsics);                    // 内参,始终是只有一个先
+                edge->setMeasurement(toVec2(feat->position_.pt));
+                edge->setInformation(Mat22::Identity()); // e转置*信息矩阵*e,所以由此可以看出误差向量为n×1,则信息矩阵为n×n
+                auto rk = new g2o::RobustKernelHuber();  // 定义robust kernel函数
+                rk->setDelta(chi2_th);                   // 设置阈值
+                // 这个delta值是,当误差的绝对值小于等于它的时候,误差函数不变.否则误差函数根据相应的鲁棒核函数发生变化.
+                edge->setRobustKernel(rk);
+                edges_and_features.insert({edge, feat});
+
+                optimizer.addEdge(edge); // 增加边
+
+                index++;
+            }
+        }
+
+        // do optimization and eliminate the outliers
+        optimizer.initializeOptimization();
+        optimizer.optimize(20);
+
+        int cnt_outlier = 0, cnt_inlier = 0;
+        int iteration = 0;
+        while (iteration < 5)
+        { // 确保内点占1/2以上,否则调整阈值,直到迭代结束
+            cnt_outlier = 0;
+            cnt_inlier = 0;
+            // determine if we want to adjust the outlier threshold
+            for (auto &ef : edges_and_features)
+            {
+                if (ef.first->chi2() > chi2_th)
+                    cnt_outlier++;
+                else
+                    cnt_inlier++;
+            }
+            double inlier_ratio = cnt_inlier / double(cnt_inlier + cnt_outlier);
+            if (inlier_ratio > 0.5)
+                break;
+            else
+            {
+                chi2_th *= 2;
+                iteration++;
+            }
+        }
+
+        for (auto &ef : edges_and_features)
+        { // 根据新的阈值,调整哪些是外点 ,并移除
+            if (ef.first->chi2() > chi2_th)
+            {
+                ef.second->is_outlier_ = true;
+                // remove the observation
+                ef.second->map_point_.lock()->RemoveObservation(ef.second);
+            }
+            else
+                ef.second->is_outlier_ = false;
+        }
+
+        std::cout << "Outlier/Inlier in optimization: " << cnt_outlier << "/"
+                  << cnt_inlier << std::endl;
+        double total_reprojection_error = 0.0;
+        int num_reprojections = 0;
+        for (auto &ef : edges_and_features)
+        {
+            double reprojection_error = ef.first->chi2();
+            total_reprojection_error += reprojection_error;
+            num_reprojections++;
+        }
+        double average_reprojection_error = total_reprojection_error / num_reprojections;
+        cout << "final average reprojection error is: " << average_reprojection_error << endl;
+        // Set pose and lanrmark position,这样也就把后端优化的结果反馈给了前端
+        for (auto &v : vertices)
+        {
+            // 因为之前的id都加了1,这里的id都要减1
+            frames_.at(v.first - 1)->SetPose(v.second->estimate()); // KeyframesType是unordered_map
+        }                                                             // unordered_map.at()和unordered_map[]都用于引用给定位置上存在的元素
+        for (auto &v : vertices_landmarks)
+        {
+            cv::Vec3d lms(v.second->estimate()(0), v.second->estimate()(1), v.second->estimate()(2));
+            landmarks.at(v.first)->SetPos(lms); // landmarks:unordered_map<unsigned long, MapPoint::Ptr>
+        }
+        setIntrinsic(vertex_intrinsics->estimate());
+        camera_->setIntrinsic(intrinsic_); // 优化完成后要更新相机内参
+    };
+
+
     void Steps::count_feature_point(Map::LandmarksType &landmarks)
     {
         int mp_f_num = 0;

@@ -52,6 +52,7 @@ namespace ISfM
         }
 
         void localBA(Map::KeyframesType &keyframes, Map::LandmarksType &landmarks);
+        void gloabalBA(Map::LandmarksType &landmarks);
 
         void count_feature_point(Map::LandmarksType &landmarks);
 

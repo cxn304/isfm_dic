@@ -10,9 +10,9 @@ namespace ISfM
     };
     Initializer::Initializer(const ImageLoader &image_loader, const Dataset &Cdate)
         : image_loader_(image_loader), Cdate_(Cdate)
-    { // 2900.0,2890.0,791,656
-        K_ = (cv::Mat_<double>(3, 3) << 2600.0, 0.0, 800.0,
-              0.0, 2690.0, 600.0,
+    { // 2892.0,2883.0,823,605
+        K_ = (cv::Mat_<double>(3, 3) << 2892.0, 0.0, 823.0,
+              0.0, 2883.0, 605.0,
               0.0, 0.0, 1.0);
         // 建立所有的frame
         for (int i = 0; i < image_loader_.filenames_.size(); i++)
@@ -335,6 +335,7 @@ namespace ISfM
 
     void Initializer::TriangulateInitPoints(Frame::Ptr &frame_one, Frame::Ptr &frame_two)
     {
+        cv::Mat image = cv::imread(frame_one->img_name, cv::IMREAD_COLOR);
         std::vector<SE3> poses{frame_one->pose_, frame_two->pose_};
         SE3 current_pose_Twc_one = frame_one->Pose().inverse(); // camera to world,frame里的是world to camera
         SE3 current_pose_Twc_two = frame_two->Pose().inverse();
@@ -366,6 +367,10 @@ namespace ISfM
                 if (triangulation(poses, points, pworld) && pworld[2] > 0)
                 {
                     auto new_map_point = MapPoint::CreateNewMappoint();
+                    uchar* pixel = image.ptr<uchar>(queryFeature->position_.pt.y, queryFeature->position_.pt.x);
+                    Eigen::Matrix<uchar, 3, 1> color;
+                    color << pixel[2], pixel[1], pixel[0];
+                    new_map_point->SetColor(color);
                     cv::Vec3d cvVector;
                     cvVector[0] = pworld(0);
                     cvVector[1] = pworld(1);

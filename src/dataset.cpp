@@ -72,15 +72,37 @@ namespace ISfM
 
     int Dataset::DetectFeatures(const cv::Mat &image, vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
     {
-        cv::Mat mask(image.size(), CV_8UC1, 255);
-        // 创建 SIFT 对象
         cv::Ptr<cv::SIFT> sifts = cv::SIFT::create(2000);
-        // 检测特征点
-        sifts->detect(image, keypoints);
-        // 计算特征描述符
-        sifts->compute(image, keypoints, descriptors);
-        // 设置特征点之间的最小距离阈值
-        float minDistancePixels = 1.0f;
+        // 构建图像金字塔
+        // 构建图像金字塔
+        std::vector<cv::Mat> pyramids;
+        cv::buildPyramid(image, pyramids, 3);
+
+        // 在每个金字塔层上检测特征点并计算描述符
+        for (int level = 0; level < pyramids.size(); ++level)
+        {
+            cv::Mat &pyramid = pyramids[level];
+
+            // 检测特征点
+            std::vector<cv::KeyPoint> levelKeypoints;
+            sifts->detect(pyramid, levelKeypoints);
+
+            // 计算描述符
+            cv::Mat levelDescriptors;
+            sifts->compute(pyramid, levelKeypoints, levelDescriptors);
+
+            // 转换特征点的坐标到原始图像尺度
+            for (cv::KeyPoint &keypoint : levelKeypoints)
+            {
+                keypoint.pt *= pow(2.0, level);
+                keypoints.push_back(keypoint);
+            }
+
+            // 将计算得到的描述符添加到总体描述符矩阵中
+            descriptors.push_back(levelDescriptors);
+        }
+
+        float minDistancePixels = 1.5f;
         // 迭代遍历特征点,根据距离阈值筛选特征点
         std::vector<cv::KeyPoint> filteredKeypoints;
         vector<int> extracted_id;
@@ -235,7 +257,7 @@ namespace ISfM
                     kptNode >> kpt;
                     kpts.push_back(kpt);
                 }
-                kpoints_.push_back(kpts); // 这里要修改,kpts是一个point2d类才行
+                kpoints_.push_back(kpts);
                 cv::FileNode descriptorNode = fs[fms]["descriptor"];
                 cv::Mat descriptor;
                 descriptorNode >> descriptor;
@@ -306,7 +328,7 @@ namespace ISfM
         fs << "]";
         fs.release();
     };
-
+    // 多尺度下计算Match
     void Dataset::ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
                                  cv::Mat &desc1, cv::Mat &desc2,
                                  std::vector<cv::DMatch> &RR_matches,

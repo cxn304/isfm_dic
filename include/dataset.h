@@ -24,23 +24,55 @@ namespace ISfM
             std::cout << "Failed to open the file." << std::endl;
             return;
         }
-
         // 写入PLY头部信息
-        file << "ply" << std::endl;
-        file << "format ascii 1.0" << std::endl;
-        file << "element vertex " << landmarked.size() / 3 << std::endl;
-        file << "property float x" << std::endl;
-        file << "property float y" << std::endl;
-        file << "property float z" << std::endl;
-        file << "end_header" << std::endl;
+        file << "ply\n";
+        file << "format ascii 1.0\n";
+        file << "element vertex " << landmarked.size() << "\n";
+        file << "property float x\n";
+        file << "property float y\n";
+        file << "property float z\n";
+        file << "property uchar red\n";
+        file << "property uchar green\n";
+        file << "property uchar blue\n";
+        file << "end_header\n";
         // 写入顶点数据
         for (auto &landmark : landmarked)
         {
             cv::Vec3d pos = landmark.second->pos_;
-            file << pos[0] << " " << pos[1] << " " << pos[2] << std::endl;
+            Eigen::Matrix<uchar, 3, 1> color = landmark.second->color_;
+            file << pos[0] << " " << pos[1] << " " << pos[2] << " "
+                 << static_cast<int>(color(0)) << " "
+                 << static_cast<int>(color(1)) << " "
+                 << static_cast<int>(color(2)) << "\n";
         }
         file.close();
         std::cout << "PLY file saved successfully." << std::endl;
+    };
+
+    inline void SavePose(const std::string &filename, const vector<Frame::Ptr> &frames)
+    {
+        cv::FileStorage fs(filename, cv::FileStorage::WRITE);
+
+        for (int i = 0; i < frames.size(); ++i)
+        {
+            // 创建一个帧的命名空间
+            fs << "frame"
+               << "{";
+            // 保存图像名称
+            fs << "img_name" << frames[i]->img_name;
+            // 保存内参
+            cv::Mat intrinsics;
+            cv::eigen2cv(frames[i]->intrix_, intrinsics);
+            fs << "intrinsics" << intrinsics;
+            // 保存位姿
+            cv::Mat pose;
+            cv::eigen2cv(frames[i]->pose_.matrix(), pose);
+            fs << "pose" << pose;
+            // 关闭帧的命名空间
+            fs << "}";
+        }
+        fs.release();
+        std::cout << "pose file saved successfully." << std::endl;
     };
 
     class Dataset

@@ -14,6 +14,7 @@
 /imgs
 /bin
 /data
+/test
 # Compiled Dynamic libraries
 *.so
 *.dylib
@@ -31,7 +32,7 @@ vocab_larger.yml.gz
 *.la
 *.a
 *.lib
-
+*.ply
 # Executables
 *.exe
 *.out

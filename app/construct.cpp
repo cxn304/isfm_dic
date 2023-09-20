@@ -10,18 +10,6 @@
 using namespace ISfM;
 using namespace std;
 
-void drawCameraPose(cv::Mat& image, const Sophus::SE3d& cameraPose, double scale = 1.0)
-{
-    Eigen::Vector3d cameraPosition = cameraPose.translation() * 200.0;
-    Eigen::Matrix3d cameraRotation = cameraPose.rotationMatrix();
-
-    Eigen::Vector3d cameraDirection = cameraRotation * Eigen::Vector3d(0, 0, 1);
-    Eigen::Vector3d cameraTarget = cameraPosition + cameraDirection * scale;
-
-    cv::arrowedLine(image, cv::Point(cameraPosition.x(), cameraPosition.y()), cv::Point(cameraTarget.x(), cameraTarget.y()), cv::Scalar(0, 0, 255), 2);
-    cv::circle(image, cv::Point(cameraPosition.x(), cameraPosition.y()), 4, cv::Scalar(0, 0, 255), -1);
-}
-
 int main(int argc, char **argv)
 {
     std::cout << "OpenCV version: " << CV_VERSION << std::endl;
@@ -68,22 +56,11 @@ int main(int argc, char **argv)
             }
         }
     }
-    for (const auto& num : steps->average_reprojection_error_) {
-        std::cout << num << " ";
-    }
-    std::cout << std::endl;
+    Map::LandmarksType all_landmarks = map_->GetAllMapPoints();
+    steps->gloabalBA(all_landmarks);
 
-    Map::LandmarksType landmarked = map_->GetAllMapPoints();
-    SavePLY("./test/point.ply",landmarked);
+    SavePLY("./test/point.ply",all_landmarks);
 
-    cv::Mat pose_image(480, 640, CV_8UC3, cv::Scalar(255, 255, 255));
-    for(int i = 0; i < Cimage_loader.filenames_.size(); ++i){
-        auto new_frame = steps->getFrames()[i];
-        SE3 c_pose = new_frame->Pose();
-        drawCameraPose(pose_image, c_pose);
-    }
-    std::string filename = "./test/camera_poses.jpg";
-    cv::imwrite(filename, pose_image);
     cout << "VO exit";
     return 0;
 };

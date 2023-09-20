@@ -14,6 +14,7 @@ add_library(ISfM SHARED
         map.cpp
         feature.cpp
         camera.cpp
+        opm_config.cpp
         # backend.cpp
         )
 # 创建库

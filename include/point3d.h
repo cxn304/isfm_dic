@@ -15,6 +15,8 @@ namespace ISfM
         unsigned long id_ = 0; // ID
         bool is_outlier_ = false;
         cv::Vec3d pos_ ; // Position in world
+        Eigen::Matrix<uchar, 3, 1> color_;
+
         std::mutex data_mutex_;
         int observed_times_ = 0; // being observed by feature matching algo.
         std::list<std::weak_ptr<ISfM::Feature>> observations_; //observations_是存储feature的list
@@ -33,6 +35,18 @@ namespace ISfM
         {
             std::unique_lock<std::mutex> lck(data_mutex_);
             pos_ = pos;
+        };
+
+        Eigen::Matrix<uchar, 3, 1> Color()
+        {
+            std::unique_lock<std::mutex> lck(data_mutex_);
+            return color_;
+        }
+
+        void SetColor(const Eigen::Matrix<uchar, 3, 1> &color)
+        {
+            std::unique_lock<std::mutex> lck(data_mutex_);
+            color_ = color;
         };
 
         void AddObservation(std::shared_ptr<Feature> feature)

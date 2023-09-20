@@ -113,7 +113,6 @@ typedef Sophus::SO3d SO3;
 #include <opencv2/features2d.hpp>
 #include <opencv2/highgui.hpp>
 
-using cv::Mat;
 
 // glog
 // #include <glog/logging.h>
