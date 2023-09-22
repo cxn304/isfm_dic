@@ -31,6 +31,8 @@ namespace ISfM
             Map::Ptr map_ = nullptr;                             // 初始化时的map,要传递到step里面的
             vector<Frame::Ptr> frames_;                          // 初始化时就搞定了所有frame
             map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
+            cv::Mat similar_matrix_;
+            int id1,id2;
         };
         struct Statistics
         {
@@ -55,7 +57,7 @@ namespace ISfM
     public:
         Initializer() {}
         Initializer(const Parameters &params, const cv::Mat &K);
-        Initializer(const ImageLoader &image_loader, const Dataset &Cdate);
+        Initializer(const ImageLoader &image_loader, const Dataset &Cdate, const cv::Mat &sMatrix);
         // 读取相似矩阵
 
         // 找到图像间的相似特征, 最大相关度的两张图片的id, 返回pts1和pts2,要以&取值的方式将pts1传入
@@ -85,7 +87,8 @@ namespace ISfM
         bool RecoverPoseFromFundanmental(const cv::Mat &F,
                                          const vector<Feature::Ptr> &points2D1,
                                          const vector<Feature::Ptr> &points2D2,
-                                         const vector<bool> &inlier_mask_F);
+                                         const vector<bool> &inlier_mask_F,
+                                         const int id1,const int id2);
         // 初始化中的三角化,P1,P2: K*[R,t] (3x3*3x4), return: 3d point
         cv::Vec3d Triangulate(const cv::Mat &P1,
                               const cv::Mat &P2,
@@ -104,6 +107,7 @@ namespace ISfM
         Map::Ptr map_ = nullptr;                             // 初始化时的map,要传递到step里面的
         map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
         Camera::Ptr camera_one_;
+        cv::Mat similar_matrix_;
     };
 }
 #endif

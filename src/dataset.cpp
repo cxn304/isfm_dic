@@ -72,7 +72,7 @@ namespace ISfM
 
     int Dataset::DetectFeatures(const cv::Mat &image, vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
     {
-        cv::Ptr<cv::SIFT> sifts = cv::SIFT::create(2000);
+        cv::Ptr<cv::SIFT> sifts = cv::SIFT::create(4000);
         // 构建图像金字塔
         // 构建图像金字塔
         std::vector<cv::Mat> pyramids;
@@ -176,7 +176,7 @@ namespace ISfM
         file.release();
     };
     */
-    ////////////////////////////////////////////////////////////////////////////////////
+
     // using orb nums to find similar image, for initialization
     void Dataset::saveORBSimilar(const string feature_path, const string filename_path)
     {
@@ -230,7 +230,7 @@ namespace ISfM
                 string line;
                 while (getline(file, line))
                 {
-                    if (line.substr(line.length() - 3) == "jpg" || line.substr(line.length() - 3) == "png")
+                    if (line.substr(line.length() - 3) == "jpg" || line.substr(line.length() - 3) == "png" || line.substr(line.length() - 3) == "bmp")
                     {
                         filenames_.push_back(line); // 存储以 ".jpg" 或 ".png" 结尾的行
                     }
@@ -289,15 +289,28 @@ namespace ISfM
     ////////////////////////////计算并储存matches,需要先readDateSet///////////////////////////////////////
     void Dataset::computeAndSaveMatches()
     {
-        // 对每对相邻图像进行特征点匹配
+        cv::Mat similarityMatrix;
+        similarityMatrix = cv::Mat::zeros(filenames_.size(), filenames_.size(), CV_32SC1);
+        // 对每对图像进行特征点匹配,并存储相似性矩阵
         for (int i = 0; i < file_paths_.size() - 1; ++i)
         {
-            std::vector<cv::DMatch> matches;
-            ComputeMatches(kpoints_[i], kpoints_[i + 1], descriptors_[i], descriptors_[i + 1], matches, 0.8);
-            // 构建图像对
-            std::pair<int, int> imagePair(i, i + 1);
-            matchesMap_[imagePair] = matches;
+            for (int j = i + 1; j < file_paths_.size(); ++j)
+            {
+                std::vector<cv::DMatch> matches;
+                int match_size = ComputeMatches(kpoints_[i],
+                                                kpoints_[j], descriptors_[i], descriptors_[j], matches, 0.8);
+                // 构建图像对,当图像对大于50对匹配点才储存进来
+                if (match_size > 50)
+                {
+                    similarityMatrix.at<int>(i,j) = match_size;
+                    std::pair<int, int> imagePair(i, j);
+                    matchesMap_[imagePair] = matches;
+                }
+            }
         }
+        cv::FileStorage file("./data/similarityMatrix.yml", cv::FileStorage::WRITE);
+        file << "matrix" << cv::Mat(similarityMatrix);;
+        file.release();
         string filename = "./data/match_info.yml";
         cv::FileStorage fs(filename, cv::FileStorage::WRITE);
 
@@ -329,10 +342,10 @@ namespace ISfM
         fs.release();
     };
     // 多尺度下计算Match
-    void Dataset::ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
-                                 cv::Mat &desc1, cv::Mat &desc2,
-                                 std::vector<cv::DMatch> &RR_matches,
-                                 const float distance_ratio)
+    int Dataset::ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
+                                cv::Mat &desc1, cv::Mat &desc2,
+                                std::vector<cv::DMatch> &RR_matches,
+                                const float distance_ratio)
     {
         std::vector<cv::DMatch> matches;
         cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create("BruteForce");
@@ -368,6 +381,7 @@ namespace ISfM
                 RR_matches.push_back(matches[i]);
             }
         }
+        return RR_matches.size();
     }
 
     ///////////////////////////将match读取储存到Dataset的matchesMap_当中///////////////////////////////////

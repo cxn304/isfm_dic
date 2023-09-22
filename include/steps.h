@@ -41,6 +41,10 @@ namespace ISfM
 
         ConstructionStatus GetStatus() const { return status_; }
 
+        void SetLastFrame(Frame::Ptr &frame){
+            last_frame_ = frame;
+        }
+
         void SetCameras(Camera::Ptr camera_one)
         {
             camera_ = camera_one;

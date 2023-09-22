@@ -30,6 +30,7 @@ namespace ISfM
         Vec6 pose_vector = pose_.log(); // 将 pose_ 转换为向量形式,6维向量
         Vec6 intrix_; //fx_,fy_,cx_,cy_,k1_,k2_,暂时内参都设置为一样的
         string img_name;
+        bool is_registed = false;
 
         // features in this image
         std::vector<std::shared_ptr<Feature>> features_img_;

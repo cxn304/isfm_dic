@@ -40,3 +40,4 @@ vocab_larger.yml.gz
 ORBSimilar.txt
 similarityMatrix.txt
 similarityMatrix.yml
+test/point.ply

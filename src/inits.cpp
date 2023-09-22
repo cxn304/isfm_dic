@@ -8,11 +8,11 @@ namespace ISfM
     {
         assert(K_.type() == CV_64F);
     };
-    Initializer::Initializer(const ImageLoader &image_loader, const Dataset &Cdate)
-        : image_loader_(image_loader), Cdate_(Cdate)
+    Initializer::Initializer(const ImageLoader &image_loader, const Dataset &Cdate, const cv::Mat &sMatrix)
+        : image_loader_(image_loader), Cdate_(Cdate), similar_matrix_(sMatrix)
     { // 2892.0,2883.0,823,605
-        K_ = (cv::Mat_<double>(3, 3) << 2892.0, 0.0, 823.0,
-              0.0, 2883.0, 605.0,
+        K_ = (cv::Mat_<double>(3, 3) << 1200.0, 0.0, 720.0,
+              0.0, 1200.0, 540.0,
               0.0, 0.0, 1.0);
         // 建立所有的frame
         for (int i = 0; i < image_loader_.filenames_.size(); i++)
@@ -53,8 +53,11 @@ namespace ISfM
         vector<Feature::Ptr> pts2;
         vector<cv::Point2f> points1;
         vector<cv::Point2f> points2;
-        // 通过迭代器的指针访问第一个vector<cv::DMatch>的值
-        auto it = matchesMap_.find(std::make_pair(0, 1));
+        // 通过迭代器的指针访问最多特征点vector<cv::DMatch>的值
+        double minVal, maxVal;
+        cv::Point minLoc, maxLoc;
+        cv::minMaxLoc(similar_matrix_, &minVal, &maxVal, &minLoc, &maxLoc);
+        auto it = matchesMap_.find(std::make_pair(maxLoc.y, maxLoc.x));
         if (it != matchesMap_.end())
         {
             vector<cv::DMatch> firstVector = it->second;
@@ -62,16 +65,18 @@ namespace ISfM
             {
                 int trainIdx = match.trainIdx; // 获取trainIdx
                 int queryIdx = match.queryIdx; // 获取queryIdx
-                cv::Point2f point1(frames_[0]->features_img_[queryIdx]->position_.pt.x,
-                                   frames_[0]->features_img_[queryIdx]->position_.pt.y);
-                cv::Point2f point2(frames_[1]->features_img_[trainIdx]->position_.pt.x,
-                                   frames_[1]->features_img_[trainIdx]->position_.pt.y);
+                cv::Point2f point1(frames_[maxLoc.y]->features_img_[queryIdx]->position_.pt.x,
+                                   frames_[maxLoc.y]->features_img_[queryIdx]->position_.pt.y);
+                cv::Point2f point2(frames_[maxLoc.x]->features_img_[trainIdx]->position_.pt.x,
+                                   frames_[maxLoc.x]->features_img_[trainIdx]->position_.pt.y);
                 points1.push_back(point1);
                 points2.push_back(point2);
-                pts1.push_back(frames_[0]->features_img_[queryIdx]); // queryIdx是匹配时的第一张图片
-                pts2.push_back(frames_[1]->features_img_[trainIdx]);
+                pts1.push_back(frames_[maxLoc.y]->features_img_[queryIdx]); // queryIdx是匹配时的第一张图片
+                pts2.push_back(frames_[maxLoc.x]->features_img_[trainIdx]);  
             }
         }
+        frames_[maxLoc.y]->is_registed = true;
+        frames_[maxLoc.x]->is_registed = true;
 
         FindFundanmental(pts1, pts2, F, inlier_mask_F, num_inliers_F);
 
@@ -80,14 +85,16 @@ namespace ISfM
         statistics_.is_succeed = false; // 在这些地方进行了赋值和初始化?
         statistics_.num_inliers_F = num_inliers_F;
 
-        RecoverPoseFromFundanmental(F, pts1, pts2, inlier_mask_F);
+        RecoverPoseFromFundanmental(F, pts1, pts2, inlier_mask_F,maxLoc.y,maxLoc.x);
 
         PrintStatistics(statistics_);
         returns_.K_ = K_;
         returns_.map_ = map_;
         returns_.matchesMap_ = matchesMap_;
         returns_.frames_ = frames_;
-
+        returns_.similar_matrix_ = similar_matrix_;
+        returns_.id1 = maxLoc.y;
+        returns_.id2 = maxLoc.x;
         return returns_;
     };
 
@@ -125,7 +132,8 @@ namespace ISfM
     bool Initializer::RecoverPoseFromFundanmental(const cv::Mat &F,
                                                   const vector<Feature::Ptr> &feature2D1,
                                                   const vector<Feature::Ptr> &feature2D2,
-                                                  const vector<bool> &inlier_mask_F)
+                                                  const vector<bool> &inlier_mask_F,
+                                                  const int id1, const int id2)
     {
         cv::Mat E, Rwto1, t1, Rwto2, t2;
         cv::Mat inlier;
@@ -138,7 +146,7 @@ namespace ISfM
                                  params_.rel_pose_essential_error, inlier);
 
         cv::recoverPose(E, points2D1, points2D2, K_, Rwto2, t2); // Rwto2也是从points2D1到points2D2的转换
-        t2 = t2 * 10.0; // 没有尺度信息，这里先给尺度大一些
+        t2 = t2 * 2.0; // 没有尺度信息，这里先给尺度大一些
 
         Rwto1 = cv::Mat::eye(3, 3, CV_64F);
         t1 = cv::Mat::zeros(3, 1, CV_64F);
@@ -147,15 +155,15 @@ namespace ISfM
         cv::cv2eigen(Rwto1, R1);
         cv::cv2eigen(t1, t11);
         Sophus::SE3d pose1(R1, t11);
-        frames_[0]->SetPose(pose1);
+        frames_[id1]->SetPose(pose1);
 
         Eigen::Matrix3d R2;
         Eigen::Vector3d t22;
         cv::cv2eigen(Rwto2, R2);
         cv::cv2eigen(t2, t22);
         Sophus::SE3d pose2(R2, t22);
-        frames_[1]->SetPose(pose2);
-        std::vector<SE3> poses{frames_[0]->pose_, frames_[1]->pose_};
+        frames_[id2]->SetPose(pose2);
+        std::vector<SE3> poses{frames_[id1]->pose_, frames_[id2]->pose_};
 
         cv::Mat P1, P2;
         cv::hconcat(K_ * Rwto1, K_ * t1, P1);
@@ -189,7 +197,7 @@ namespace ISfM
             }
         }
 
-        TriangulateInitPoints(frames_[0], frames_[1]);
+        TriangulateInitPoints(frames_[id1], frames_[id2]);
         
         cout << "cnt_init_landmarks:" << num_inliers << endl;
         sort(tri_angles.begin(), tri_angles.end());

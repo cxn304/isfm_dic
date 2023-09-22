@@ -6,7 +6,7 @@
 #include <string>
 #include <map>
 #include <filesystem>
-// #include "DBoW3/DBoW3.h"
+#include "DBoW3/DBoW3.h"
 #include "files.h"
 #include "common.h"
 #include "frame.h"
@@ -97,7 +97,7 @@ namespace ISfM
         cv::Mat readDateSet(const string &matrixPath, const string &feature_path, const string &filename_path,
                             const vector<string> &filenames);
         void computeAndSaveMatches();
-        void ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
+        int ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
                             cv::Mat &desc1, cv::Mat &desc2,
                             std::vector<cv::DMatch> &matches,
                             const float distance_ratio);
@@ -107,7 +107,7 @@ namespace ISfM
         vector<vector<cv::KeyPoint>> kpoints_;
         vector<cv::Mat> descriptors_; // descriptor vectors
         vector<string> filenames_;
-        Eigen::MatrixXd similarityMatrix_;
+        Eigen::MatrixXi similarityMatrix_;
         std::map<std::pair<int, int>, std::vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果
 
     private:
