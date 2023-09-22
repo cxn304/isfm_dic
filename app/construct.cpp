@@ -46,7 +46,7 @@ int main(int argc, char **argv)
     {
         auto new_frame = steps->getFrames()[i]; // 从数据集中读出下一帧,不能是注册过的
         if (new_frame == nullptr || new_frame->is_registed == true)
-            return false;
+            continue;
         std::pair pairi1 = make_pair(i,tmp_id1);
         std::pair pairi2 = make_pair(i,tmp_id2);
         std::pair pair1i = make_pair(tmp_id1,i);
@@ -55,7 +55,7 @@ int main(int argc, char **argv)
         auto it1i = init_information.matchesMap_.find(pair1i);
         auto iti2 = init_information.matchesMap_.find(pairi2);
         auto it2i = init_information.matchesMap_.find(pair2i);
-
+        new_frame->is_registed = true; // 将其注册
         bool success = false;
         if (iti1 != init_information.matchesMap_.end() || it1i != init_information.matchesMap_.end()){
             success = steps->AddFrame(new_frame); // 如果是id1和新的帧有关系,就将lastframe设置为id1
