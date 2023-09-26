@@ -41,7 +41,8 @@ namespace ISfM
 
         ConstructionStatus GetStatus() const { return status_; }
 
-        void SetLastFrame(Frame::Ptr &frame){
+        void SetLastFrame(Frame::Ptr &frame)
+        {
             last_frame_ = frame;
         }
 
@@ -61,8 +62,11 @@ namespace ISfM
         void count_feature_point(Map::LandmarksType &landmarks);
 
         vector<double> average_reprojection_error_;
+        vector<pair<pair<int, int>, vector<cv::DMatch>>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
 
     private:
+        std::vector<cv::DMatch> findMatch(std::pair<int, int> &keyToFind,
+                                          std::vector<std::pair<std::pair<int, int>, std::vector<cv::DMatch>>> &matchesVec_);
         void setIntrinsic(const Vec6 &out_intrinsic)
         {
             intrinsic_ = out_intrinsic;
@@ -126,10 +130,9 @@ namespace ISfM
         int tracking_inliers_ = 0; // inliers, used for testing new keyframes
         Vec6 intrinsic_ = Vec6::Zero();
         Map::Ptr map_ = nullptr;
-        vector<Frame::Ptr> frames_;                          // 所有的frame信息
-        map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
+        vector<Frame::Ptr> frames_; // 所有的frame信息
+
         ImageLoader image_loader_;
-        
 
         // params
         int num_features_ = 200;

@@ -26,13 +26,14 @@ namespace ISfM
             double init_tri_max_error = 2.0;            // 三角测量时,重投影误差阈值
             double init_tri_min_angle = 4.0;            // 三角测量时, 角度阈值
         };
-        struct Returns{
+        struct Returns
+        {
             cv::Mat K_;
-            Map::Ptr map_ = nullptr;                             // 初始化时的map,要传递到step里面的
-            vector<Frame::Ptr> frames_;                          // 初始化时就搞定了所有frame
-            map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
+            Map::Ptr map_ = nullptr;                                                          // 初始化时的map,要传递到step里面的
+            vector<Frame::Ptr> frames_;                                                       // 初始化时就搞定了所有frame
+            std::vector<std::pair<std::pair<int, int>, std::vector<cv::DMatch>>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
             cv::Mat similar_matrix_;
-            int id1,id2;
+            int id1, id2;
         };
         struct Statistics
         {
@@ -55,9 +56,8 @@ namespace ISfM
         };
 
     public:
-        Initializer() {}
         Initializer(const Parameters &params, const cv::Mat &K);
-        Initializer(const ImageLoader &image_loader, const Dataset &Cdate, const cv::Mat &sMatrix);
+        Initializer(const ImageLoader &image_loader, const Dataset::Ptr &Cdate, const cv::Mat &sMatrix);
         // 读取相似矩阵
 
         // 找到图像间的相似特征, 最大相关度的两张图片的id, 返回pts1和pts2,要以&取值的方式将pts1传入
@@ -70,11 +70,11 @@ namespace ISfM
         Returns Initialize();
         void PrintStatistics(const Statistics &statistics); // 打印初始化参数
         string GetFailReason();
-        
+
     private:
         // 计算feature数量
         void coutFeaturePoint(const vector<Feature::Ptr> &feature2D1,
-                                         const vector<Feature::Ptr> &feature2D2);
+                              const vector<Feature::Ptr> &feature2D2);
         // 使用自带参数寻找Fundemental矩阵
         void FindFundanmental(const vector<Feature::Ptr> &points2D1,
                               const vector<Feature::Ptr> &points2D2,
@@ -88,24 +88,34 @@ namespace ISfM
                                          const vector<Feature::Ptr> &points2D1,
                                          const vector<Feature::Ptr> &points2D2,
                                          const vector<bool> &inlier_mask_F,
-                                         const int id1,const int id2);
+                                         const int id1, const int id2);
         // 初始化中的三角化,P1,P2: K*[R,t] (3x3*3x4), return: 3d point
         cv::Vec3d Triangulate(const cv::Mat &P1,
                               const cv::Mat &P2,
                               const cv::Point2f &point2D1,
                               const cv::Point2f &point2D2);
+        // 自定义比较函数，按照 std::vector<cv::DMatch> 的数量从大到小进行排序
+        static bool compareByVectorSize(const std::pair<std::pair<int, int>,
+                                                        std::vector<cv::DMatch>> &a,
+                                        const std::pair<std::pair<int, int>, std::vector<cv::DMatch>> &b)
+        {
+            return a.second.size() > b.second.size();
+        }
+        // 查找matchesVec_里面的keyToFind的cv::DMatch
+        std::vector<cv::DMatch> findMatch(std::pair<int, int> &keyToFind,
+                                          std::vector<std::pair<std::pair<int, int>, std::vector<cv::DMatch>>> &matchesVec_);
 
     public:
-        vector<Frame::Ptr> frames_;                          // 所有的frame信息
+        vector<Frame::Ptr> frames_; // 所有的frame信息
         Parameters params_;
         Statistics statistics_;
         Returns returns_;
-        cv::Mat K_; // 传递到step里面的
+        cv::Mat K_;                // 传递到step里面的
         vector<cv::Mat> K_vector_; // 多个内参的预选
         ImageLoader image_loader_;
-        Dataset Cdate_;                                      // 传递一部分到step中
-        Map::Ptr map_ = nullptr;                             // 初始化时的map,要传递到step里面的
-        map<pair<int, int>, vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
+        Dataset::Ptr Cdate_;                                                              // 传递一部分到step中
+        Map::Ptr map_ = nullptr;                                                          // 初始化时的map,要传递到step里面的
+        std::vector<std::pair<std::pair<int, int>, std::vector<cv::DMatch>>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
         Camera::Ptr camera_one_;
         cv::Mat similar_matrix_;
     };

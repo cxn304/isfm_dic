@@ -79,6 +79,7 @@ namespace ISfM
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+        typedef std::shared_ptr<Dataset> Ptr;
         struct Image
         {
             int id;
@@ -93,8 +94,8 @@ namespace ISfM
         // void saveSimilarMatrix(DBoW3::Vocabulary &vocab,
         //                        const string &feature_path, const string &filename_path);
         void saveORBSimilar(const string feature_path, const string filename_path);
-        void readImageSave(const string feature_path, const string filename_path);
-        cv::Mat readDateSet(const string &matrixPath, const string &feature_path, const string &filename_path,
+        void readImageSave(const string feature_path, const vector<string> &filenames);
+        void readDateSet(const string &matrixPath, const string &feature_path,
                             const vector<string> &filenames);
         void computeAndSaveMatches();
         int ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
@@ -107,12 +108,13 @@ namespace ISfM
         vector<vector<cv::KeyPoint>> kpoints_;
         vector<cv::Mat> descriptors_; // descriptor vectors
         vector<string> filenames_;
-        Eigen::MatrixXi similarityMatrix_;
+        cv::Mat similarityMatrix_;
         std::map<std::pair<int, int>, std::vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果
 
     private:
         map<int, string> file_paths_;
         cv::Mat dbo_score_;
+        int least_match_num_ = 40;
     };
 }
 #endif

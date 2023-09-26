@@ -12,7 +12,6 @@ namespace ISfM
         string current_dir(cwd);
         // 创建文件存储对象,包括features和descriptor,文件名
         cv::FileStorage fs("./data/features.yml", cv::FileStorage::WRITE);
-        std::ofstream file("./data/feature_name.txt"); // 打开一个输出文件流
         // 创建描述符
         vector<cv::Mat> descriptors;
         // 加载第一张图像
@@ -36,30 +35,22 @@ namespace ISfM
             // 计算关键点的描述符
             cv::Mat descriptor;
             int cnt = DetectFeatures(image, kpts, descriptor);
-            // cv::drawKeypoints(image, kpts, image, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-            // cv::imwrite("keypoints_with_descriptors.jpg", image);
-            // 将关键点和描述符保存到文件
             // 提取文件名
-            size_t lastSlash = file_path.find_last_of("/\\");           // 查找路径中最后一个斜杠或反斜杠的位置
-            string filename = "img_" + file_path.substr(lastSlash + 1); // 提取最后一个斜杠之后的部分
-            replace(filename.begin(), filename.end(), '.', 'd');
+            int lastSlash = file_path.find_last_of("/\\"); // 查找路径中最后一个斜杠或反斜杠的位置
+            int lastDotPos = file_path.find_last_of('.');
+            string filename = "img_" + file_path.substr(lastSlash + 1, lastDotPos - lastSlash - 1); // 提取最后一个斜杠之后的部分
             fs << filename << "{"
                << "imd_id" << img_id
                << "file_path" << file_path
                << "kpts" << kpts
                << "descriptor" << descriptor
                << "}";
-            if (file.is_open())
-            {
-                file << filename << '\n';
-            }
             descriptors.push_back(descriptor);
             file_paths_[img_id] = file_path;
             img_id++;
         }
         // 关闭文件存储
         fs.release();
-        file.close();
         // save vocab data base
         // DBoW3::Vocabulary vocab;
         // vocab.create(descriptors);
@@ -220,35 +211,22 @@ namespace ISfM
         }
     };
     ////////////////////////////////////////////////////////////////////////////////////
-    void Dataset::readImageSave(const string feature_path, const string filename_path)
+    void Dataset::readImageSave(const string feature_path, const vector<string> &filenames)
     {
-        ifstream file(filename_path); // 打开一个输入文件流
         if (filenames_.empty())
         {
-            if (file.is_open())
-            {
-                string line;
-                while (getline(file, line))
-                {
-                    if (line.substr(line.length() - 3) == "jpg" || line.substr(line.length() - 3) == "png" || line.substr(line.length() - 3) == "bmp")
-                    {
-                        filenames_.push_back(line); // 存储以 ".jpg" 或 ".png" 结尾的行
-                    }
-                }
-                file.close(); // 关闭文件流
-            }
-            else
-            {
-                cout << "can't open file" << endl;
-            }
+            filenames_ = filenames;
             cout << "reading database" << endl;
             cv::FileStorage fs(feature_path, cv::FileStorage::READ);
             if (!fs.isOpened())
             {
                 cout << "can't open file" << feature_path << endl;
             }
-            for (auto &fms : filenames_)
+            for (auto &fmss : filenames_)
             {
+                int lastSlash = fmss.find_last_of("/\\"); // 查找路径中最后一个斜杠或反斜杠的位置
+                int lastDotPos = fmss.find_last_of('.');
+                string fms = "img_" + fmss.substr(lastSlash + 1, lastDotPos - lastSlash - 1);
                 cv::FileNode kptsNode = fs[fms]["kpts"];
                 vector<cv::KeyPoint> kpts;
                 for (const auto &kptNode : kptsNode)
@@ -267,30 +245,19 @@ namespace ISfM
         }
     }
     ///////////////////////////////建立好数据库后,再read//////////////////////////////////////////
-    cv::Mat Dataset::readDateSet(const string &matrixPath, const string &feature_path, const string &filename_path,
-                                 const vector<string> &filenames)
+    void Dataset::readDateSet(const string &matrixPath, const string &feature_path,
+                              const vector<string> &filenames)
     {
-        readImageSave(feature_path, filename_path);
+        readImageSave(feature_path, filenames);
         for (int i = 0; i < filenames.size(); i++)
         {
             file_paths_.insert(std::make_pair(i, filenames[i]));
         }
-
-        cv::FileStorage fs(matrixPath, cv::FileStorage::READ);
-        if (!fs.isOpened())
-        {
-            cout << "can't open file" << matrixPath << endl;
-        }
-        cv::Mat sMatrix;
-        fs["matrix"] >> sMatrix;
-        fs.release();
-        return sMatrix;
     };
     ////////////////////////////计算并储存matches,需要先readDateSet///////////////////////////////////////
     void Dataset::computeAndSaveMatches()
     {
-        cv::Mat similarityMatrix;
-        similarityMatrix = cv::Mat::zeros(filenames_.size(), filenames_.size(), CV_32SC1);
+        similarityMatrix_ = cv::Mat::zeros(filenames_.size(), filenames_.size(), CV_32SC1);
         // 对每对图像进行特征点匹配,并存储相似性矩阵
         for (int i = 0; i < file_paths_.size() - 1; ++i)
         {
@@ -298,18 +265,32 @@ namespace ISfM
             {
                 std::vector<cv::DMatch> matches;
                 int match_size = ComputeMatches(kpoints_[i],
-                                                kpoints_[j], descriptors_[i], descriptors_[j], matches, 0.8);
-                // 构建图像对,当图像对大于50对匹配点才储存进来
-                if (match_size > 50)
+                                                kpoints_[j], descriptors_[i], descriptors_[j], matches, 0.9);
+                // 构建图像对,当图像对大于30对匹配点才储存进来
+                if (match_size > least_match_num_)
                 {
-                    similarityMatrix.at<int>(i,j) = match_size;
+                    similarityMatrix_.at<int>(i, j) = match_size;
                     std::pair<int, int> imagePair(i, j);
                     matchesMap_[imagePair] = matches;
                 }
             }
         }
+        for (int i = 0; i < file_paths_.size() - 1; ++i)
+        {
+            int j = i + 1;
+            std::vector<cv::DMatch> matches;
+            int match_size = ComputeMatches(kpoints_[i],
+                                            kpoints_[j], descriptors_[i], descriptors_[j], matches, 0.9);
+            std::pair<int, int> imagePair(i, j);
+            if (!matchesMap_.count(imagePair))
+            {
+                similarityMatrix_.at<int>(i, j) = match_size;
+                matchesMap_[imagePair] = matches;
+            }
+        }
         cv::FileStorage file("./data/similarityMatrix.yml", cv::FileStorage::WRITE);
-        file << "matrix" << cv::Mat(similarityMatrix);;
+        file << "matrix" << cv::Mat(similarityMatrix_);
+        ;
         file.release();
         string filename = "./data/match_info.yml";
         cv::FileStorage fs(filename, cv::FileStorage::WRITE);
