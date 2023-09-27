@@ -36,6 +36,41 @@ vector<int> findReturnIndex(const vector<pair<pair<int, int>, vector<cv::DMatch>
     }
     return return_idx;
 };
+
+void SaveMappoint(Map::LandmarksType &all_landmarks)
+{
+    cv::FileStorage fs("./data/mappoint.yml", cv::FileStorage::WRITE);
+    for (auto &landmark : all_landmarks)
+    {
+        std::string node_name = "point_" + std::to_string(landmark.second->id_);
+        fs << node_name << "{";
+        fs << "id_" << static_cast<int64>(landmark.second->id_);
+        fs << "is_outlier_" << landmark.second->is_outlier_;
+        fs << "pos_" << landmark.second->pos_;
+        fs << "observed_times_" << landmark.second->observed_times_;
+        cv::Vec3d pos = landmark.second->pos_;
+        int f_id = 0;
+        for (auto it = landmark.second->observations_.begin();
+             it != landmark.second->observations_.end(); ++it)
+        {
+            std::shared_ptr<ISfM::Feature> feature = it->lock(); // 使用weak_ptr的lock()方法获取强引用
+            if (!feature->is_outlier_)
+            {
+                std::string feature_name = "feature_" + std::to_string(f_id);
+                fs << feature_name << "{";
+                fs << "x" << feature->position_.pt.x;
+                fs << "y" << feature->position_.pt.y;
+                fs << "size" << feature->position_.size;
+                fs << "}";
+                f_id++;
+                std::shared_ptr<Frame> frame_shared_ptr = feature->frame_.lock();
+                fs << "img_name" << frame_shared_ptr->img_name;
+            }
+        }
+        fs << "}";
+        fs.release();
+    }
+};
 // 查看是不是所有的图片都已经被注册
 bool isImageAllAdded(vector<pair<pair<int, int>, vector<cv::DMatch>>> &matchMap,
                      const vector<Frame::Ptr> &frames_)
@@ -54,8 +89,8 @@ bool isImageAllAdded(vector<pair<pair<int, int>, vector<cv::DMatch>>> &matchMap,
 int main(int argc, char **argv)
 {
     cout << "OpenCV version: " << CV_VERSION << endl;
-    ISfM::ImageLoader Cimage_loader("./imgs/Viking/");
-    ISfM::Dataset::Ptr Cdates = make_shared<Dataset>();
+    ISfM::ImageLoader Cimage_loader("./imgs/Viking/", "./config/default.yaml");
+    ISfM::Dataset::Ptr Cdates = make_shared<Dataset>(Cimage_loader);
     string feature_path = "./data/features.yml";
     string smilar_matrix_path = "./data/similarityMatrix.yml";
     // step2 : 读取特征及数据库文件,读取匹配信息并存储到数据库
@@ -67,8 +102,8 @@ int main(int argc, char **argv)
     ISfM::Map::Ptr map_ = nullptr;
     map_ = init_information.map_; // 初始化地图点
     Camera::Ptr camera_one = make_shared<Camera>(init_information.K_.at<double>(0, 0),
-                                                      init_information.K_.at<double>(1, 1), init_information.K_.at<double>(0, 2),
-                                                      init_information.K_.at<double>(1, 2));
+                                                 init_information.K_.at<double>(1, 1), init_information.K_.at<double>(0, 2),
+                                                 init_information.K_.at<double>(1, 2));
     // step4: 初始化step的所有成员变量
     ISfM::Steps::Ptr steps = make_shared<Steps>(init_information, Cimage_loader, camera_one); // 这里要补充构造函数
     steps->SetMap(map_);
@@ -96,6 +131,7 @@ int main(int argc, char **argv)
             steps->SetLastFrame(steps->getFrames()[last_id]);
             steps->AddFrame(new_frame);
             new_frame->is_registed = true; // 将其注册
+            steps->ReTriangulate();
             Map::KeyframesType active_kfs = map_->GetActiveKeyFrames();
             Map::LandmarksType active_landmarks = map_->GetActiveMapPoints();
             steps->localBA(active_kfs, active_landmarks);
@@ -106,10 +142,10 @@ int main(int argc, char **argv)
             break;
         }
     }
-
+    map_->deleteObservedTimes1();
     Map::LandmarksType all_landmarks = map_->GetAllMapPoints();
     steps->gloabalBA(all_landmarks);
-
+    SaveMappoint(all_landmarks);
     ISfM::SavePLY("./test/point.ply", all_landmarks);
 
     cout << "VO exit";

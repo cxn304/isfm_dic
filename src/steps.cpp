@@ -4,13 +4,16 @@
 namespace ISfM
 {
     Steps::Steps(const Initializer::Returns &returns,
-                 const ImageLoader &Cimage_loader, Camera::Ptr &camera_one) : image_loader_(Cimage_loader), camera_(camera_one)
+                 const ImageLoader &Cimage_loader, Camera::Ptr &camera_one) : image_loader_(Cimage_loader),
+                 camera_(camera_one)
     {
         intrinsic_ << returns.K_.at<double>(0, 0), returns.K_.at<double>(1, 1),
             returns.K_.at<double>(0, 2), returns.K_.at<double>(1, 2), 0.0, 0.0;
         frames_ = returns.frames_;
         map_ = returns.map_;
         matchesMap_ = returns.matchesMap_;
+        std::vector<bool> myVector(matchesMap_.size(), false);
+        matchesMapRetriangulated = myVector;
         camera_->setIntrinsic(intrinsic_);
         auto tmp_points = map_->GetAllMapPoints();
         count_feature_point(tmp_points);
@@ -19,25 +22,24 @@ namespace ISfM
     // 在增加某一帧时,根据目前的状况选择不同的处理函数
     bool Steps::AddFrame(Frame::Ptr frame)
     {
-        current_frame_ = frame;
-        // Track()是Frontend的成员函数,status_是Frontend的数据,可以直接使用
-        Track(); // 在TRACKING_GOOD和TRACKING_BAD的时候都执行Track函数
+        current_frame_ = frame; // Track()是Frontend的成员函数,status_是Frontend的数据,可以直接使用
+        Track();                // 在TRACKING_GOOD和TRACKING_BAD的时候都执行Track函数
         return true;
     }
 
     // 在执行Track之前,需要明白,Track究竟在做一件什么事情,Track是当前帧和上一帧之间进行的匹配
     bool Steps::Track()
     {
-        // 先看last_frame_是不是正常存在的
+        // relative motion,不一定方向是对的,如果当前图向右转,下一张图相对向左转,初始误差会大
         if (last_frame_)
         {
-            current_frame_->SetPose(relative_motion_ * last_frame_->Pose()); // 用匀速模型给current_frame_当前帧的位姿设置一个初值
+            current_frame_->SetPose(last_frame_->Pose()); // 给current_frame_当前帧的位姿设置一个初值
         }
         int num_track_last = FindFeaturesInSecond();
         tracking_inliers_ = EstimateCurrentPose(); // 接下来根据跟踪到的内点的匹配数目,可以分类进行后续操作,优化当前帧的位置
 
-        InsertKeyframe();                                                          // 在此函数里面判断当前要不要插入关键帧
-        relative_motion_ = current_frame_->Pose() * last_frame_->Pose().inverse(); // 更新当前帧和上一帧的位置差,也就是ΔT,变量名是relative_motion_
+        InsertKeyframe(); // 在此函数里面判断当前要不要插入关键帧
+        // relative_motion_ = current_frame_->Pose() * last_frame_->Pose().inverse(); // 更新当前帧和上一帧的位置差,也就是ΔT,变量名是relative_motion_
 
         return true;
     }
@@ -60,20 +62,28 @@ namespace ISfM
         return true;
     }
     ////////////////////////////////////////////////////////////////////////////////
-    std::vector<cv::DMatch> Steps::findMatch(std::pair<int, int> &keyToFind,
-                                                   std::vector<std::pair<std::pair<int, int>, std::vector<cv::DMatch>>> &matchesVec_)
+    std::vector<cv::DMatch> Steps::findMatch(int id1, int id2, bool &reverse,
+                                             std::vector<std::pair<std::pair<int, int>, std::vector<cv::DMatch>>> &matchesVec_)
     {
         std::vector<cv::DMatch> vectorToFind;
-        // 循环查找特定的 std::vector<cv::DMatch>
-        for (const auto &pair : matchesVec_)
+        std::pair<int, int> keyToFind;
+        if (id1 > id2)
         {
-            if (pair.first == keyToFind)
+            keyToFind = std::make_pair(id2, id1);
+            reverse = true;
+        }
+        else
+            keyToFind = std::make_pair(id1, id2);
+        // 循环查找特定的 std::vector<cv::DMatch>
+        for (const auto &pairs : matchesVec_)
+        {
+            if (pairs.first == keyToFind)
             {
-                vectorToFind = pair.second;// 找到匹配的键
-                break;   
+                vectorToFind = pairs.second; // 找到匹配的键
+                break;
             }
         }
-        return vectorToFind;// 在这里使用 vectorToFind
+        return vectorToFind; // 在这里使用 vectorToFind
     }
 
     // map_point_就是路标点////////////////////
@@ -86,59 +96,124 @@ namespace ISfM
                 mp->AddObservation(feat);
         }
     }
+    // 从matchesMap_里面寻找已经注册过的一对对图像,对这些图像进行三角化
+    int Steps::ReTriangulate()
+    {
+        int cnt_triangulated_pts = 0; // 三角化成功的点的数目
+        std::pair<int, int> keyToFind;
+        int index = 0;
+        for (const auto &matchs : matchesMap_)
+        {
+            if(matchesMapRetriangulated[index]){
+                index++; // 减少判断时间,已经用这两幅图三角化的点就不要继续三角化了
+                continue;
+            }
+            keyToFind = matchs.first; // 这里的顺序是从小到大排列的
+            if (frames_[keyToFind.first]->is_registed && frames_[keyToFind.second]->is_registed)
+            {
+                vector<SE3> poses = {frames_[keyToFind.first]->pose_,frames_[keyToFind.second]->pose_};
+                cv::Mat image = cv::imread(frames_[keyToFind.first]->img_name, cv::IMREAD_COLOR);
+                vector<cv::DMatch> this_match = matchs.second;
+                for (auto &mt : this_match)
+                {
+                    int queryIdx, trainIdx; // 取出对应的特征点索引
+                    queryIdx = mt.queryIdx;
+                    trainIdx = mt.trainIdx;
+                    // 根据索引获取特征点
+                    std::shared_ptr<Feature> lastFeature = frames_[keyToFind.first]->features_img_[queryIdx];
+                    std::shared_ptr<Feature> currentFeature = frames_[keyToFind.second]->features_img_[trainIdx];
 
-    // 当一个新的关键帧到来后,我们势必需要补充一系列新的特征点,
-    // 此时则需要像建立初始地图一样,对这些新加入的特征点进行三角化,求其3D位置,三角化要考虑去畸变,之后进行
+                    // 遍历两个frame match的所有点
+                    if (lastFeature->map_point_.expired() &&
+                        currentFeature->map_point_.expired()) // expired()为true的话表示关联的std::shared_ptr已经被销毁
+                    {
+                        // 编号小的图的特征点未关联地图点且编号大的图未关联地图点,尝试三角化
+                        std::vector<Vec3> points{
+                            camera_->pixel2camera(
+                                Vec2(lastFeature->position_.pt.x,
+                                     lastFeature->position_.pt.y)),
+                            camera_->pixel2camera(
+                                Vec2(currentFeature->position_.pt.x,
+                                     currentFeature->position_.pt.y))};
+                        Vec3 pworld = Vec3::Zero(); // points第一个是编号小的图对应的相机
+
+                        if (triangulation(poses, points, pworld) && pworld[2] > 0)
+                        {
+                            auto new_map_point = MapPoint::CreateNewMappoint();
+                            // 这里的poses是Tcw 形式Pose, world to camera, 所以pworld是在世界坐标系下
+                            uchar *pixel = image.ptr<uchar>(lastFeature->position_.pt.y, lastFeature->position_.pt.x);
+                            Eigen::Matrix<uchar, 3, 1> color;
+                            color << pixel[2], pixel[1], pixel[0];
+                            new_map_point->SetColor(color);
+                            cv::Vec3d cvVector;
+                            cvVector[0] = pworld(0);
+                            cvVector[1] = pworld(1);
+                            cvVector[2] = pworld(2);
+                            new_map_point->SetPos(cvVector); // 设置mapoint类中的坐标
+                            new_map_point->AddObservation(
+                                lastFeature); // 增加mappoint类中的对应的那个feature（左右目）
+                            new_map_point->AddObservation(
+                                currentFeature);
+
+                            lastFeature->map_point_ = new_map_point;
+                            currentFeature->map_point_ = new_map_point;
+                            map_->InsertMapPoint(new_map_point);
+                            cnt_triangulated_pts++;
+                        }
+                    }
+                }
+                matchesMapRetriangulated[index] = true;
+            }
+            index++; // 不论有没有改变matchesMapRetriangulated,index都要自增
+        }
+        std::cout << "re triangulate new landmarks: " << cnt_triangulated_pts << std::endl;
+        return cnt_triangulated_pts;
+    };
+
+    // 新帧进来,需要对这些新加入的特征点进行三角化,求其3D位置,三角化先不考虑去畸变
     int Steps::TriangulateNewPoints(Frame::Ptr &frame_last, Frame::Ptr &frame_current)
     {
         cv::Mat image = cv::imread(frame_last->img_name, cv::IMREAD_COLOR);
-        std::vector<SE3> poses{frame_last->pose_, frame_current->pose_};
-        SE3 current_pose_Twc_last = frame_last->Pose().inverse(); // camera to world,frame里的是world to camera
-        SE3 current_pose_Twc_current = frame_current->Pose().inverse();
         int cnt_triangulated_pts = 0; // 三角化成功的点的数目
-        std::pair<int, int> keyToFind = std::make_pair(frame_last->id_, frame_current->id_);
-        std::vector<cv::DMatch> this_match = findMatch(keyToFind, matchesMap_);
         bool reverse = false;
-        if(this_match.empty()) {
-            keyToFind = std::make_pair(frame_current->id_, frame_last->id_);
-            reverse = true;
-        }
-        this_match = findMatch(keyToFind, matchesMap_);
+        vector<cv::DMatch> this_match = findMatch(frame_last->id_, frame_current->id_, reverse, matchesMap_);
+        vector<SE3> poses = {last_frame_->pose_,current_frame_->pose_};
         for (auto &mt : this_match)
         {
-            // 取出对应的特征点索引
-            int queryIdx, trainIdx;
-            if(reverse == false){
+            int queryIdx, trainIdx; // 取出对应的特征点索引
+            if (reverse == false)
+            {
                 queryIdx = mt.queryIdx;
                 trainIdx = mt.trainIdx;
             }
-            else{
+            else
+            {
                 queryIdx = mt.trainIdx;
                 trainIdx = mt.queryIdx;
             }
-            // 根据索引获取特征点
-            std::shared_ptr<Feature> queryFeature = frame_last->features_img_[queryIdx];
-            std::shared_ptr<Feature> trainFeature = frame_current->features_img_[trainIdx];
+            // 根据索引获取特征点, feature就是lastframe中的feature,有可能是训练集里面的,上面的判断筛选过了
+            std::shared_ptr<Feature> lastFeature = frame_last->features_img_[queryIdx];
+            std::shared_ptr<Feature> currentFeature = frame_current->features_img_[trainIdx];
 
             // 遍历两个frame match的所有点
-            if (queryFeature->map_point_.expired() &&
-                trainFeature->map_point_.expired()) // expired()为true的话表示关联的std::shared_ptr已经被销毁
+            if (lastFeature->map_point_.expired() &&
+                currentFeature->map_point_.expired()) // expired()为true的话表示关联的std::shared_ptr已经被销毁
             {
-                // 左图的特征点未关联地图点且存在右图匹配点,尝试三角化
+                // lastFeature特征点未关联地图点且currentFeature未关联地图点,尝试三角化
                 std::vector<Vec3> points{
                     camera_->pixel2camera(
-                        Vec2(queryFeature->position_.pt.x,
-                             queryFeature->position_.pt.y)),
+                        Vec2(lastFeature->position_.pt.x,
+                             lastFeature->position_.pt.y)),
                     camera_->pixel2camera(
-                        Vec2(trainFeature->position_.pt.x,
-                             trainFeature->position_.pt.y))};
-                Vec3 pworld = Vec3::Zero();
+                        Vec2(currentFeature->position_.pt.x,
+                             currentFeature->position_.pt.y))};
+                Vec3 pworld = Vec3::Zero(); // points第一个是编号小的图对应的相机
 
                 if (triangulation(poses, points, pworld) && pworld[2] > 0)
                 {
                     auto new_map_point = MapPoint::CreateNewMappoint();
-                    // 这里的poses是Tcw 形式Pose, world to camera, 所以pworld应该是在世界坐标系下
-                    uchar *pixel = image.ptr<uchar>(queryFeature->position_.pt.y, queryFeature->position_.pt.x);
+                    // 这里的poses是Tcw 形式Pose, world to camera, 所以pworld是在世界坐标系下
+                    uchar *pixel = image.ptr<uchar>(lastFeature->position_.pt.y, lastFeature->position_.pt.x);
                     Eigen::Matrix<uchar, 3, 1> color;
                     color << pixel[2], pixel[1], pixel[0];
                     new_map_point->SetColor(color);
@@ -148,18 +223,18 @@ namespace ISfM
                     cvVector[2] = pworld(2);
                     new_map_point->SetPos(cvVector); // 设置mapoint类中的坐标
                     new_map_point->AddObservation(
-                        queryFeature); // 增加mappoint类中的对应的那个feature（左右目）
+                        lastFeature); // 增加mappoint类中的对应的那个feature（左右目）
                     new_map_point->AddObservation(
-                        trainFeature);
+                        currentFeature);
 
-                    queryFeature->map_point_ = new_map_point;
-                    trainFeature->map_point_ = new_map_point;
+                    lastFeature->map_point_ = new_map_point;
+                    currentFeature->map_point_ = new_map_point;
                     map_->InsertMapPoint(new_map_point);
                     cnt_triangulated_pts++;
                 }
             }
         }
-        std::cout << "new landmarks: " << cnt_triangulated_pts << std::endl; // 这一步成功率太低
+        std::cout << "new frame's new landmarks: " << cnt_triangulated_pts << std::endl;
         return cnt_triangulated_pts;
     }
 
@@ -170,42 +245,35 @@ namespace ISfM
         unsigned c_id = current_frame_->id_;
         unsigned js = 0;
         bool reverse = false;
-        std::pair<int, int> keyToFind = std::make_pair(l_id, c_id);
-        std::vector<cv::DMatch> this_match = findMatch(keyToFind, matchesMap_);
-        if(this_match.empty()) {
-            keyToFind = std::make_pair(c_id, l_id);
-            reverse = true;
-        }
-        this_match = findMatch(keyToFind, matchesMap_);
+        std::vector<cv::DMatch> this_match = findMatch(l_id, c_id, reverse, matchesMap_);
         std::vector<cv::Point2f> kps_last, kps_current;
         for (auto &mt : this_match)
         {
-            // 取出对应的特征点索引,如果不反转,照常取,如果反转,trainIdx和queryIdx反转
-            int queryIdx, trainIdx;
-            if(reverse == false){
+            int queryIdx, trainIdx; // 取出对应的特征点索引,如果不反转,照常取,如果反转,trainIdx和queryIdx反转
+            if (reverse == false)
+            {
                 queryIdx = mt.queryIdx;
                 trainIdx = mt.trainIdx;
             }
-            else{
-                queryIdx = mt.trainIdx;
-                trainIdx = mt.queryIdx;
-            }
-
-            // 根据索引获取特征点
-            std::shared_ptr<Feature> queryFeature = last_frame_->features_img_[queryIdx];
-            // 如果上一帧中的该特征点不是空指针,则将该帧中的这个特征点的mappoint赋值
-            if (queryFeature->map_point_.lock())
+            else
             {
-                auto mp = queryFeature->map_point_.lock();
+                queryIdx = mt.trainIdx;
+                trainIdx = mt.queryIdx; // queryIdx和trainIdx已经自适应了,queryIdx要放到标号小的图上
+            }
+            std::shared_ptr<Feature> lastFeature = last_frame_->features_img_[queryIdx]; // 根据索引获取特征点
+            // 如果上一帧中的该特征点不是空指针,则将该帧中的这个特征点的mappoint赋值
+            if (lastFeature->map_point_.lock())
+            {
+                auto mp = lastFeature->map_point_.lock();
                 Vec3 positions;
                 cv::cv2eigen(mp->pos_, positions);
-                auto px = camera_->world2pixel(positions, current_frame_->Pose()); //
-                std::shared_ptr<Feature> trainFeature = current_frame_->features_img_[trainIdx];
-                trainFeature->map_point_ = queryFeature->map_point_;
-                // queryFeature->map_point_.lock()->AddObservation(trainFeature);
+                auto currentPx = camera_->world2pixel(positions, current_frame_->Pose()); // 当前帧的Pose
+                std::shared_ptr<Feature> currentFeature = current_frame_->features_img_[trainIdx];
+                currentFeature->map_point_ = lastFeature->map_point_;
+                // lastFeature->map_point_.lock()->AddObservation(currentFeature);
                 js++;
-                kps_last.push_back(queryFeature->position_.pt);
-                kps_current.push_back(cv::Point2f(px[0], px[1]));
+                kps_last.push_back(lastFeature->position_.pt);
+                kps_current.push_back(cv::Point2f(currentPx[0], currentPx[1]));
             }
         }
         return js; // 第一次新增的AddObservation数量也是对的上的
@@ -219,7 +287,7 @@ namespace ISfM
         typedef g2o::LinearSolverDense<BlockSolverType::PoseMatrixType>
             LinearSolverType;
         auto solver = new g2o::OptimizationAlgorithmLevenberg(std::make_unique<BlockSolverType>(
-                std::make_unique<LinearSolverType>()));
+            std::make_unique<LinearSolverType>()));
         g2o::SparseOptimizer optimizer;
         // optimizer.setVerbose(true); // 开启优化信息输出
         optimizer.setAlgorithm(solver);
@@ -240,7 +308,7 @@ namespace ISfM
         int index = 1;
         std::vector<EdgeProjectionPoseOnly *> edges;
         std::vector<Feature::Ptr> features; // features存储的是相机的特征点
-        //!!!!在此之前要把last_frame的map_point和current_frame的mappoint联系起来
+        // 在此之前要把last_frame的map_point和current_frame的mappoint联系起来
         // 这一段代码是将新frame中所有与之前图像有共同观测点的feature找出来
         for (auto &c_feature : current_frame_->features_img_)
         {
@@ -276,7 +344,6 @@ namespace ISfM
             optimizer.initializeOptimization();
             optimizer.optimize(10); // 每次循环迭代10次
             cnt_outlier = 0;
-
             // count the outliers
             for (size_t i = 0; i < edges.size(); ++i)
             {
@@ -316,7 +383,7 @@ namespace ISfM
         for (auto &feat : features)
         {
             if (feat->is_outlier_)
-            {                              //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            {
                 feat->map_point_.reset();  //.reset()方法的作用是将该弱引用指针设置为空nullptr,但不影响指向该对象的强引用数量,只会使得其弱引用数量减少
                 feat->is_outlier_ = false; // maybe we can still use it in future
             }
@@ -504,7 +571,7 @@ namespace ISfM
             std::make_unique<BlockSolverType>(
                 std::make_unique<LinearSolverType>()));
         g2o::SparseOptimizer optimizer;
-        // optimizer.setVerbose(true);     // 开启优化信息输出
+        //optimizer.setVerbose(true);     // 开启优化信息输出
         optimizer.setAlgorithm(solver); // 打开调试输出
         // pose 顶点，使用Keyframe id
         std::map<unsigned long, VertexPose *> vertices;
@@ -521,7 +588,7 @@ namespace ISfM
                 max_kf_id = kf->keyframe_id_;
             }
 
-            vertices.insert({kf->keyframe_id_, vertex_pose}); // 插入自定义map类型的vertices 不要make_pair也可以嘛
+            vertices.insert({kf->keyframe_id_, vertex_pose}); // 插入自定义map类型的vertices
         }
         // 路标顶点，使用路标id索引
         std::map<unsigned long, VertexXYZ *> vertices_landmarks;
@@ -577,9 +644,7 @@ namespace ISfM
                 rk->setDelta(chi2_th);                   // 设置阈值
                 edge->setRobustKernel(rk);
                 edges_and_features.insert({edge, feat});
-
                 optimizer.addEdge(edge); // 增加边
-
                 index++;
             }
         }
@@ -625,7 +690,7 @@ namespace ISfM
         }
 
         cout << "****************************Outlier/Inlier in optimization: " << cnt_outlier << "/"
-             << cnt_inlier << endl;
+             << cnt_inlier << "****************************" << endl;
 
         // Calculate and print average reprojection error
         double total_reprojection_error = 0.0;
@@ -743,16 +808,14 @@ namespace ISfM
                 // 这个delta值是,当误差的绝对值小于等于它的时候,误差函数不变.否则误差函数根据相应的鲁棒核函数发生变化.
                 edge->setRobustKernel(rk);
                 edges_and_features.insert({edge, feat});
-
                 optimizer.addEdge(edge); // 增加边
-
                 index++;
             }
         }
 
         // do optimization and eliminate the outliers
         optimizer.initializeOptimization();
-        optimizer.optimize(20);
+        optimizer.optimize(10);
 
         int cnt_outlier = 0, cnt_inlier = 0;
         int iteration = 0;

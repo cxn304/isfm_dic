@@ -23,19 +23,34 @@ namespace ISfM
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-
         virtual void setToOriginImpl() override
         {
             _estimate.setZero();
         }
-
         virtual void oplusImpl(const double *update) override
         {
             // 在这里,v是一个常量向量类型,它通过将update指针映射为长度为VertexIntrinsics::Dimension的常量向量来创建
             Vec6::ConstMapType v(update, VertexIntrinsics::Dimension);
             _estimate += v;
         }
-
+        virtual bool read(std::istream &) override { return false; }
+        virtual bool write(std::ostream &) const override { return false; }
+    };
+    // 自定义相机内参顶点类(fx,fy,k1,k2)
+    class VertexFocalK : public g2o::BaseVertex<4, Vec4>
+    {
+    public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+        virtual void setToOriginImpl() override
+        {
+            _estimate.setZero();
+        }
+        virtual void oplusImpl(const double *update) override
+        {
+            // 在这里,v是一个常量向量类型,它通过将update指针映射为长度为VertexFocalK::Dimension的常量向量来创建
+            Vec4::ConstMapType v(update, VertexFocalK::Dimension);
+            _estimate += v;
+        }
         virtual bool read(std::istream &) override { return false; }
         virtual bool write(std::ostream &) const override { return false; }
     };

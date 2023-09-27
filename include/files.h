@@ -14,14 +14,19 @@ namespace ISfM
     {
     public:
         vector<string> filenames_;
+        string dataset_dir_;
         int num_images_;
         int width_;
         int height_;
+        double fx_, fy_;
+        int board_size_;
+        int leastMatchNum_, numFeatures_, numFeaturesInit_, numFeaturesTracking_;
+
         ImageLoader(){};
-        ImageLoader(const string &path) : path_(path), num_images_(0)
+        ImageLoader(const string &img_path, const string &config_path) : img_path_(img_path), num_images_(0)
         {
             // 获取文件名列表
-            filenames_ = get_filenames_(path);
+            filenames_ = get_filenames_(img_path);
             std::sort(filenames_.begin(), filenames_.end());
             // 统计图片数量
             for (const string &filename : filenames_)
@@ -32,7 +37,18 @@ namespace ISfM
                 }
             }
             // 获取图像信息
-            get_images_info(path, filenames_, width_, height_);
+            get_images_info(img_path, filenames_, width_, height_);
+
+            cv::FileStorage fs(config_path, cv::FileStorage::READ);
+            fs["dataset_dir"] >> dataset_dir_;
+            // 读取其他参数
+            fs["least_match_num"] >> leastMatchNum_;
+            fs["num_features"] >> numFeatures_;
+            fs["num_features_init"] >> numFeaturesInit_;
+            fs["num_features_tracking"] >> numFeaturesTracking_;
+            fs["fx"] >> fx_;
+            fs["fy"] >> fy_;
+            fs["boardSize"] >> board_size_;
         }
 
         void get_images_info(const string &path, vector<string> &filenames_, int &width, int &height)
@@ -51,7 +67,7 @@ namespace ISfM
         }
 
     private:
-        string path_;
+        string img_path_;
 
         vector<string> get_filenames_(const string &path)
         {

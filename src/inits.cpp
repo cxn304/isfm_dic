@@ -8,8 +8,8 @@ namespace ISfM
     Initializer::Initializer(const ImageLoader &image_loader, const Dataset::Ptr &Cdate, const cv::Mat &sMatrix)
         : image_loader_(image_loader), Cdate_(Cdate), similar_matrix_(sMatrix)
     { // 2892.0,2883.0,823,605 // 1200, 1200, 720, 540
-        K_ = (cv::Mat_<double>(3, 3) << 2900.0, 0.0, 823.0,
-              0.0, 2900.0, 605.0,
+        K_ = (cv::Mat_<double>(3, 3) << image_loader.fx_, 0.0, image_loader.width_/2.0,
+              0.0, image_loader.fy_, image_loader.height_/2.0,
               0.0, 0.0, 1.0);
         // 建立所有的frame
         for (int i = 0; i < image_loader_.filenames_.size(); i++)

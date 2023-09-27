@@ -6,7 +6,7 @@
 #include <string>
 #include <map>
 #include <filesystem>
-#include "DBoW3/DBoW3.h"
+// #include "DBoW3/DBoW3.h"
 #include "files.h"
 #include "common.h"
 #include "frame.h"
@@ -16,6 +16,7 @@
 using namespace std;
 namespace ISfM
 {
+    class ImageLoader;
     inline void SavePLY(const std::string &filename, const Map::LandmarksType &landmarked)
     {
         std::ofstream file(filename);
@@ -85,7 +86,7 @@ namespace ISfM
             int id;
             string name;
         };
-        Dataset() {}
+        Dataset(const ImageLoader &image_loader);
         void establishDbo(const vector<string> &filenames);
         int DetectFeatures(const cv::Mat &image, vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors);
 
@@ -98,20 +99,24 @@ namespace ISfM
         void readDateSet(const string &matrixPath, const string &feature_path,
                             const vector<string> &filenames);
         void computeAndSaveMatches();
+        void computeChessMatches();
         int ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
                             cv::Mat &desc1, cv::Mat &desc2,
                             std::vector<cv::DMatch> &matches,
                             const float distance_ratio);
         void loadMatchesFromFile(const std::string &filename);
+        void readChess(bool is_read_chess, const vector<string> &file_paths);//如果是棋盘格就这么处理
 
-        string vocab_file_path;
+        string img_file_path_;
         vector<vector<cv::KeyPoint>> kpoints_;
         vector<cv::Mat> descriptors_; // descriptor vectors
         vector<string> filenames_;
         cv::Mat similarityMatrix_;
+        std::vector<std::vector<cv::Point2f>> corners_;
         std::map<std::pair<int, int>, std::vector<cv::DMatch>> matchesMap_; // 存储每对图像之间的匹配结果
 
     private:
+        int boarder_size_;
         map<int, string> file_paths_;
         cv::Mat dbo_score_;
         int least_match_num_ = 40;

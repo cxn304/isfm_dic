@@ -3,10 +3,16 @@
 # the tum dataset directory, change it to yours! 
 dataset_dir: ./imgs/Viking/
 feature_path: ./data/features.yml
-filename_path: ./data/feature_name.txt
 matrix_path: ./data/similarityMatrix.yml
 match_path: ./data/match_info.yml
 
-num_features: 150
+least_match_num: 100
+num_features: 70
 num_features_init: 50
 num_features_tracking: 50
+
+boardSize: 12
+
+fx: 2900.0
+fy: 2900.0
+

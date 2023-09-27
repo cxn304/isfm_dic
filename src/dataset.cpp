@@ -3,6 +3,12 @@
 using namespace std;
 namespace ISfM
 {
+    Dataset::Dataset(const ImageLoader &image_loader)
+    {
+        least_match_num_ = image_loader.leastMatchNum_;
+        img_file_path_ = image_loader.dataset_dir_;
+        boarder_size_ = image_loader.board_size_;
+    };
     // extract all orbsift in all images, then save it
     void Dataset::establishDbo(const vector<string> &file_paths)
     {
@@ -10,7 +16,6 @@ namespace ISfM
         char cwd[PATH_MAX];
         getcwd(cwd, sizeof(cwd));
         string current_dir(cwd);
-        // 创建文件存储对象,包括features和descriptor,文件名
         cv::FileStorage fs("./data/features.yml", cv::FileStorage::WRITE);
         // 创建描述符
         vector<cv::Mat> descriptors;
@@ -58,8 +63,63 @@ namespace ISfM
         // string file_path = current_dir + "/data/vocab_larger.yml.gz";
         // vocab.save(file_path);
         // saveSimilarMatrix(vocab, "./data/features.yml", "./data/feature_name.txt");
-        cout << "features detect done" << endl;
+        std::cout << "features detect done" << endl;
     }
+    // 主要是计算棋盘格的数据**************************
+    void Dataset::readChess(bool is_read_chess, const vector<string> &file_paths)
+    {
+        char cwd[PATH_MAX];
+        getcwd(cwd, sizeof(cwd));
+        string current_dir(cwd);
+        cv::FileStorage fs("./data/features.yml", cv::FileStorage::WRITE);
+        vector<cv::Mat> descriptors;
+        cv::Mat image = cv::imread(file_paths[0], cv::IMREAD_GRAYSCALE);
+        int width = image.cols;
+        int height = image.rows;
+        int img_id = 0;
+        cv::Size boardSize(boarder_size_, boarder_size_);
+        for (const string &file_path : file_paths)
+        {
+            // 加载图像
+            cv::Mat image = cv::imread(file_path, cv::IMREAD_GRAYSCALE);
+            if (image.empty())
+            {
+                cerr << "Failed to read image: " << file_path << endl;
+                continue;
+            }
+            std::vector<cv::Point2f> corners;
+            corners_.push_back(corners);
+            bool found = cv::findChessboardCorners(image, boardSize, corners);
+            if (found)
+            {
+                std::vector<cv::KeyPoint> kpts;
+                for (const auto &corner : corners)
+                    kpts.emplace_back(corner, 1.0);                              // 构造特征点，将角点坐标作为特征点位置
+                                                                                 // 计算描述子
+                cv::Ptr<cv::Feature2D> descriptorExtractor = cv::SIFT::create(); // 使用SIFT算法作为描述子提取器
+                cv::Mat descriptor;
+                descriptorExtractor->compute(image, kpts, descriptor);
+                int lastSlash = file_path.find_last_of("/\\"); // 查找路径中最后一个斜杠或反斜杠的位置
+                int lastDotPos = file_path.find_last_of('.');
+                string filename = "img_" + file_path.substr(lastSlash + 1, lastDotPos - lastSlash - 1); // 提取最后一个斜杠之后的部分
+                fs << filename << "{"
+                   << "imd_id" << img_id
+                   << "file_path" << file_path
+                   << "kpts" << kpts
+                   << "descriptor" << descriptor
+                   << "}";
+                descriptors_.push_back(descriptor);
+                file_paths_[img_id] = file_path;
+                img_id++;
+            }
+            else
+            {
+                std::cout << "Chessboard not found." << std::endl;
+            }
+        }
+        fs.release();
+        std::cout << "features detect done" << endl;
+    };
 
     int Dataset::DetectFeatures(const cv::Mat &image, vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
     {
@@ -254,6 +314,61 @@ namespace ISfM
             file_paths_.insert(std::make_pair(i, filenames[i]));
         }
     };
+    ////////////////////////////计算chess matches///////////////////////////////////////
+    void Dataset::computeChessMatches()
+    {
+        similarityMatrix_ = cv::Mat::zeros(filenames_.size(), filenames_.size(), CV_32SC1);
+        for (int i = 0; i < file_paths_.size() - 1; ++i)
+        {
+            int j = i + 1;
+            std::vector<cv::DMatch> matches;
+            int numMatches = kpoints_[i].size();
+            for (int k = 0; k < numMatches; k++)
+            {
+                cv::DMatch match(k, k, 0); // 创建DMatch对象，参数分别为queryIdx、trainIdx、distance
+                matches.push_back(match);  // 将DMatch对象添加到matches向量中
+            }
+
+            std::pair<int, int> imagePair(i, j);
+            if (!matchesMap_.count(imagePair))
+            {
+                matchesMap_[imagePair] = matches;
+                similarityMatrix_.at<int>(i, j) = boarder_size_*boarder_size_;
+            }
+        }
+        cv::FileStorage file("./data/similarityMatrix.yml", cv::FileStorage::WRITE);
+        file << "matrix" << cv::Mat(similarityMatrix_);
+        file.release();
+        string filename = "./data/match_info.yml";
+        cv::FileStorage fs(filename, cv::FileStorage::WRITE);
+
+        if (!fs.isOpened())
+        {
+            std::cerr << "Failed to open file: " << filename << std::endl;
+            return;
+        }
+        fs << "matches"
+           << "[";
+        for (const auto &pair : matchesMap_)
+        {
+            fs << "{";
+            fs << "imagePair"
+               << "[" << pair.first.first << pair.first.second << "]";
+            fs << "matches"
+               << "[";
+            for (const cv::DMatch &match : pair.second)
+            {
+                fs << "{";
+                fs << "queryIdx" << match.queryIdx;
+                fs << "trainIdx" << match.trainIdx;
+                fs << "}";
+            }
+            fs << "]";
+            fs << "}";
+        }
+        fs << "]";
+        fs.release();
+    };
     ////////////////////////////计算并储存matches,需要先readDateSet///////////////////////////////////////
     void Dataset::computeAndSaveMatches()
     {
@@ -290,7 +405,6 @@ namespace ISfM
         }
         cv::FileStorage file("./data/similarityMatrix.yml", cv::FileStorage::WRITE);
         file << "matrix" << cv::Mat(similarityMatrix_);
-        ;
         file.release();
         string filename = "./data/match_info.yml";
         cv::FileStorage fs(filename, cv::FileStorage::WRITE);
@@ -322,6 +436,7 @@ namespace ISfM
         fs << "]";
         fs.release();
     };
+
     // 多尺度下计算Match
     int Dataset::ComputeMatches(vector<cv::KeyPoint> &kp01, vector<cv::KeyPoint> &kp02,
                                 cv::Mat &desc1, cv::Mat &desc2,

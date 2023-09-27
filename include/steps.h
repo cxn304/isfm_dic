@@ -58,14 +58,16 @@ namespace ISfM
 
         void localBA(Map::KeyframesType &keyframes, Map::LandmarksType &landmarks);
         void gloabalBA(Map::LandmarksType &landmarks);
+        int ReTriangulate(); // 再三角化,这个是在新图像注册之后进行
 
         void count_feature_point(Map::LandmarksType &landmarks);
 
         vector<double> average_reprojection_error_;
+        vector<bool> matchesMapRetriangulated;
         vector<pair<pair<int, int>, vector<cv::DMatch>>> matchesMap_; // 存储每对图像之间的匹配结果,传递到step里面
 
     private:
-        std::vector<cv::DMatch> findMatch(std::pair<int, int> &keyToFind,
+        std::vector<cv::DMatch> findMatch(int id1, int id2, bool &reverse,
                                           std::vector<std::pair<std::pair<int, int>, std::vector<cv::DMatch>>> &matchesVec_);
         void setIntrinsic(const Vec6 &out_intrinsic)
         {

@@ -47,14 +47,16 @@ namespace ISfM
     // 删除最旧的关键帧
     void Map::RemoveOldKeyframe()
     {
-        if (current_frame_ == nullptr) return;
+        if (current_frame_ == nullptr)
+            return;
         // 寻找与当前帧最近与最远的两个关键帧
         double max_dis = 0, min_dis = 9999;
         double max_kf_id = 0, min_kf_id = 0;
         auto Twc = current_frame_->Pose().inverse(); // 当前帧的位姿的逆
         for (auto &kf : active_keyframes_)
         {
-            if (kf.second == current_frame_) continue;
+            if (kf.second == current_frame_)
+                continue;
             auto dis = (kf.second->Pose() * Twc).log().norm(); // 计算当前帧与其他关键帧的相对位姿差
             if (dis > max_dis)
             {
@@ -112,6 +114,24 @@ namespace ISfM
                 ++iter;
             }
         }
-        cout << " Removed " << cnt_landmark_removed << " active landmarks";
-    }
+        cout << " Removed " << cnt_landmark_removed << " active landmarks" << endl;
+    };
+
+    void Map::deleteObservedTimes1(){
+        int cnt_landmark_removed = 0;
+        for (auto iter = active_landmarks_.begin(); iter != active_landmarks_.end();)
+        {
+            if (iter->second->observed_times_ == 1)
+            {
+                iter->second->RemoveObservation(iter->second->GetObs().front().lock());
+                iter = active_landmarks_.erase(iter);
+                cnt_landmark_removed++;
+            }
+            else
+            {
+                ++iter;
+            }
+        }
+        cout << " Removed " << cnt_landmark_removed << " active landmarks" << endl;
+    };
 }
